@@ -8,7 +8,7 @@ Sirve para dos proyectos:
 | EMG | **Ballena Monitor** | `Ballena-EMG-ML` | 1 canal, filtrada, 1000 Hz (`emg_mV`) | Extensión y flexión · Reposo/equilibrio · Pronación y supinación |
 | Acelerómetro | **TactSuit** (sistema táctil de orientación espacial) | `TactSuit-IMU` | 3 canales, 100 Hz (`ax_g`, `ay_g`, `az_g`) | Línea base/equilibrio · Inclinaciones voluntarias · Deriva postural inducida · Recuperación de perturbaciones |
 
-Se pueden **vincular otros ESP** desde la app (*+ Agregar otro dispositivo*), siempre que usen el protocolo de abajo.
+Se pueden **vincular otros ESP** desde la app (*+ Agregar otro dispositivo*); el ESP debe usar el protocolo de abajo.
 Las carpetas se pueden quitar (✕), renombrar (✏️) o agregar (*+ Agregar otra opción*). **El nombre de la carpeta es la etiqueta en Edge Impulse.**
 
 Los datos **no se guardan en el ESP**: se guardan en el navegador que está viendo la señal (IndexedDB).

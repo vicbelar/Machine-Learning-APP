@@ -41,7 +41,7 @@
 
         <p class="step"><span>2</span> Dispositivo a vincular</p>
         <div id="deviceList" class="list"></div>
-        <button id="btnAddDevice" class="btn ghost small-btn">+ Agregar otro dispositivo (vincular desde código)</button>
+        <button id="btnAddDevice" class="btn ghost small-btn">+ Agregar otro dispositivo</button>
 
         <p class="step"><span>3</span> Movimientos que se tomarán en cuenta para machine learning</p>
         <div id="moveRows" class="list"></div>
@@ -147,9 +147,6 @@
   <dialog id="deviceDlg">
     <form method="dialog">
       <h3>Vincular otro dispositivo</h3>
-      <p class="small muted">Para otro ESP32 que use el mismo protocolo de este repo (Bluetooth Nordic UART,
-        comandos START/STOP e INFO, líneas <code>D,seq,valores</code>; ver README). Si el ESP manda
-        <code>#INFO</code>, la app toma de ahí la frecuencia y los canales automáticamente.</p>
       <label class="field">Nombre para mostrar
         <input id="devName" type="text" placeholder="p. ej. EMG antebrazo izquierdo" maxlength="40">
       </label>
