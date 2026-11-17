@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <title>Captura ML · EMG / Acelerómetro</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <button id="btnBack" class="icon-btn" hidden aria-label="Regresar">&larr;</button>
+    <div class="topbar-title">
+      <h1 id="title">Captura ML</h1>
+      <p id="subtitle" class="muted">Datos para Edge Impulse</p>
+    </div>
+    <div id="bleBadge" class="badge off" hidden>Sin conexión</div>
+  </header>
+
+  <main id="app">
+    <!-- ======== Pantalla 1: proyectos ======== -->
+    <section id="viewHome" class="view">
+      <div class="card">
+        <h2>Nuevo proyecto</h2>
+        <label class="field">Nombre
+          <input id="newName" type="text" placeholder="p. ej. Sujeto 01 - muñeca derecha" maxlength="60">
+        </label>
+        <p class="field-label">Dispositivo</p>
+        <div class="choice-row">
+          <label class="choice">
+            <input type="radio" name="newType" value="emg" checked>
+            <span><b>EMG · Bluetooth</b><small>Ballena Monitor</small></span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="newType" value="acc">
+            <span><b>Acelerómetro · Bluetooth</b><small>TactSuit (orientación espacial)</small></span>
+          </label>
+        </div>
+        <button id="btnCreate" class="btn primary">Crear proyecto</button>
+      </div>
+
+      <h2 class="section-title">Mis proyectos</h2>
+      <div id="projectList" class="list"></div>
+      <p id="noProjects" class="muted center">Todavía no hay proyectos.</p>
+      <p id="bleWarning" class="warn" hidden>
+        Este navegador no tiene Web Bluetooth. Usa Chrome en Android o en la computadora
+        (en iPhone no funciona). Puedes probar la app con el <b>simulador</b>.
+      </p>
+    </section>
+
+    <!-- ======== Pantalla 2: proyecto (conexión + carpetas) ======== -->
+    <section id="viewProject" class="view" hidden>
+      <div class="card">
+        <div>
+          <p class="muted small" id="projDevice"></p>
+          <p class="small" id="streamInfo">Sin señal</p>
+        </div>
+        <div class="conn-buttons">
+          <button id="btnConnect" class="btn primary">Conectar</button>
+          <button id="btnSim" class="btn ghost">Simulador</button>
+        </div>
+        <canvas id="livePlot" class="plot" height="160"></canvas>
+        <p class="muted small" id="plotLegend"></p>
+      </div>
+
+      <h2 class="section-title">Carpetas · elige el movimiento</h2>
+      <div id="folderGrid" class="grid"></div>
+
+      <div class="row gap wrap">
+        <button id="btnZip" class="btn">Descargar todo (ZIP para Edge Impulse)</button>
+        <button id="btnDeleteProject" class="btn danger ghost">Borrar proyecto</button>
+      </div>
+    </section>
+
+    <!-- ======== Pantalla 3: carpeta (grabar) ======== -->
+    <section id="viewFolder" class="view" hidden>
+      <div class="card">
+        <p id="folderHint" class="muted"></p>
+        <div class="settings">
+          <label class="field">Duración
+            <select id="selDuration">
+              <option value="10">10 s</option>
+              <option value="20">20 s</option>
+              <option value="30" selected>30 s</option>
+              <option value="45">45 s</option>
+              <option value="60">60 s (máx.)</option>
+            </select>
+          </label>
+          <label class="field">Ritmo
+            <select id="selBpm">
+              <option value="20">20 por min (lento)</option>
+              <option value="30" selected>30 por min</option>
+              <option value="40">40 por min</option>
+              <option value="60">60 por min (rápido)</option>
+              <option value="0">Sin metrónomo</option>
+            </select>
+          </label>
+          <label class="field check">
+            <input id="chkSound" type="checkbox" checked> Sonido
+          </label>
+        </div>
+
+        <div id="recorder" class="recorder">
+          <div id="metronome" class="metronome"><span id="phase">Listo</span></div>
+          <div class="progress"><div id="progressBar"></div></div>
+          <p id="recStatus" class="center small muted"></p>
+          <button id="btnRecord" class="btn record">● Grabar</button>
+          <button id="btnStop" class="btn danger" hidden>■ Detener y guardar</button>
+          <button id="btnCancel" class="btn ghost" hidden>Cancelar</button>
+        </div>
+        <canvas id="folderPlot" class="plot" height="110"></canvas>
+      </div>
+
+      <div class="row between">
+        <h2 class="section-title">Grabaciones</h2>
+        <span id="folderCount" class="pill"></span>
+      </div>
+      <div id="recList" class="list"></div>
+      <p id="noRecs" class="muted center">Aún no hay grabaciones de este movimiento.</p>
+    </section>
+  </main>
+
+  <dialog id="previewDlg">
+    <form method="dialog">
+      <h3 id="previewTitle"></h3>
+      <canvas id="previewPlot" class="plot" height="200"></canvas>
+      <p id="previewInfo" class="small muted"></p>
+      <button class="btn">Cerrar</button>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
