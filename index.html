@@ -23,20 +23,30 @@
     <section id="viewHome" class="view">
       <div class="card">
         <h2>Nuevo proyecto</h2>
-        <label class="field">Nombre
-          <input id="newName" type="text" placeholder="p. ej. Sujeto 01 - muñeca derecha" maxlength="60">
+        <label class="field">Nombre del proyecto
+          <input id="newName" type="text" placeholder="p. ej. EMG Ballena  ·  Acelerómetro TactSuit" maxlength="60">
         </label>
-        <p class="field-label">Dispositivo</p>
+
+        <p class="step"><span>1</span> Tipo de dispositivo</p>
         <div class="choice-row">
           <label class="choice">
             <input type="radio" name="newType" value="emg" checked>
-            <span><b>EMG · Bluetooth</b><small>Ballena Monitor</small></span>
+            <span><b>EMG</b><small>Señal muscular</small></span>
           </label>
           <label class="choice">
             <input type="radio" name="newType" value="acc">
-            <span><b>Acelerómetro · Bluetooth</b><small>TactSuit (orientación espacial)</small></span>
+            <span><b>Acelerómetro</b><small>Postura / movimiento</small></span>
           </label>
         </div>
+
+        <p class="step"><span>2</span> Dispositivo a vincular</p>
+        <div id="deviceList" class="list"></div>
+        <button id="btnAddDevice" class="btn ghost small-btn">+ Agregar otro dispositivo (vincular desde código)</button>
+
+        <p class="step"><span>3</span> Movimientos que se tomarán en cuenta para machine learning</p>
+        <div id="moveRows" class="list"></div>
+        <button id="btnNewMoveCustom" class="btn ghost small-btn">+ Agregar otra opción</button>
+
         <button id="btnCreate" class="btn primary">Crear proyecto</button>
       </div>
 
@@ -53,6 +63,9 @@
     <section id="viewProject" class="view" hidden>
       <div class="card">
         <div>
+          <label class="field">Dispositivo vinculado
+            <select id="projDeviceSel"></select>
+          </label>
           <p class="muted small" id="projDevice"></p>
           <p class="small" id="streamInfo">Sin señal</p>
         </div>
@@ -64,11 +77,12 @@
         <p class="muted small" id="plotLegend"></p>
       </div>
 
-      <h2 class="section-title">Carpetas · elige el movimiento</h2>
+      <h2 class="section-title">Carpetas · elige el movimiento a grabar</h2>
       <div id="folderGrid" class="grid"></div>
+      <div id="addMoves" class="chips"></div>
 
-      <div class="row gap wrap">
-        <button id="btnZip" class="btn">Descargar todo (ZIP para Edge Impulse)</button>
+      <div class="row gap wrap bottom-actions">
+        <button id="btnZip" class="btn">⬇ Guardar ZIP para Edge Impulse</button>
         <button id="btnDeleteProject" class="btn danger ghost">Borrar proyecto</button>
       </div>
     </section>
@@ -127,6 +141,36 @@
       <canvas id="previewPlot" class="plot" height="200"></canvas>
       <p id="previewInfo" class="small muted"></p>
       <button class="btn">Cerrar</button>
+    </form>
+  </dialog>
+
+  <dialog id="deviceDlg">
+    <form method="dialog">
+      <h3>Vincular otro dispositivo</h3>
+      <p class="small muted">Para otro ESP32 que use el mismo protocolo de este repo (Bluetooth Nordic UART,
+        comandos START/STOP e INFO, líneas <code>D,seq,valores</code>; ver README). Si el ESP manda
+        <code>#INFO</code>, la app toma de ahí la frecuencia y los canales automáticamente.</p>
+      <label class="field">Nombre para mostrar
+        <input id="devName" type="text" placeholder="p. ej. EMG antebrazo izquierdo" maxlength="40">
+      </label>
+      <label class="field">Nombre Bluetooth del ESP (empieza con…)
+        <input id="devPrefix" type="text" placeholder="p. ej. EMG-Izq" maxlength="29">
+      </label>
+      <div class="settings">
+        <label class="field">Frecuencia (Hz)
+          <input id="devFs" type="number" min="1" max="4000" value="1000">
+        </label>
+        <label class="field">Escala
+          <input id="devScale" type="number" min="1" value="10">
+        </label>
+      </div>
+      <label class="field">Canales (separados por coma)
+        <input id="devChannels" type="text" value="emg_mV">
+      </label>
+      <div class="row gap">
+        <button value="cancel" class="btn ghost" formnovalidate>Cancelar</button>
+        <button id="devSave" value="ok" class="btn primary">Guardar dispositivo</button>
+      </div>
     </form>
   </dialog>
 

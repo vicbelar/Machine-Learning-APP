@@ -24,42 +24,33 @@ const MAX_RECS = 30;          // grabaciones máximas por movimiento
 const COUNTDOWN_S = 3;        // cuenta regresiva antes de grabar
 const MIN_SAVE_S = 1;         // si se detiene antes de esto, no se guarda
 
+// Tipos de dispositivo y movimientos sugeridos (las "carpetas" que se pueden agregar)
 const DEVICE_TYPES = {
   emg: {
-    label: 'EMG · Bluetooth',
-    project: 'Ballena Monitor',
-    namePrefix: 'Ballena-EMG',
-    fs: 1000,
-    channels: ['emg_mV'],
-    scale: 10,
+    label: 'EMG',
     plotSeconds: 3,
-    movements: [
-      { id: 'flexion_extension', name: 'Flexión y Extensión de muñeca', icon: '✋',
-        phases: ['Flexión', 'Extensión'],
-        hint: 'Flexiona y extiende la muñeca siguiendo el ritmo: un movimiento por cada pulso.' },
-      { id: 'pronacion_supinacion', name: 'Pronación y Supinación', icon: '🔄',
-        phases: ['Pronación', 'Supinación'],
-        hint: 'Gira el antebrazo (palma abajo / palma arriba) siguiendo el ritmo.' },
-      { id: 'descanso', name: 'Equilibrio / descanso', icon: '😌',
+    catalog: [
+      { id: 'flexion_extension', name: 'Extensión y flexión', icon: '✋',
+        phases: ['Extensión', 'Flexión'],
+        hint: 'Extiende y flexiona la muñeca siguiendo el ritmo: un movimiento por cada pulso.' },
+      { id: 'descanso', name: 'Reposo/equilibrio', icon: '😌',
         phases: ['Relaja'],
         hint: 'Mano y antebrazo relajados, sin mover. Es la clase de “sin movimiento”.' },
+      { id: 'pronacion_supinacion', name: 'Pronación y supinación', icon: '🔄',
+        phases: ['Pronación', 'Supinación'],
+        hint: 'Gira el antebrazo (palma abajo / palma arriba) siguiendo el ritmo.' },
     ],
   },
   acc: {
-    label: 'Acelerómetro · Bluetooth',
-    project: 'TactSuit',
-    namePrefix: 'TactSuit',
-    fs: 100,
-    channels: ['ax_g', 'ay_g', 'az_g'],
-    scale: 1000,
+    label: 'Acelerómetro',
     plotSeconds: 10,
-    movements: [
-      { id: 'limites_estabilidad', name: 'Límites de estabilidad', icon: '🎯',
-        phases: ['Inclina', 'Regresa'],
-        hint: 'Inclínate lo más posible sin dar un paso y regresa al centro, siguiendo el ritmo.' },
-      { id: 'linea_base', name: 'Línea base', icon: '🧍',
+    catalog: [
+      { id: 'linea_base', name: 'Línea base/equilibrio', icon: '🧍',
         phases: ['Quieto'],
         hint: 'De pie, quieto y relajado.' },
+      { id: 'limites_estabilidad', name: 'Inclinaciones voluntarias', icon: '🎯',
+        phases: ['Inclina', 'Regresa'],
+        hint: 'Inclínate lo más posible sin dar un paso y regresa al centro, siguiendo el ritmo.' },
       { id: 'deriva_postural', name: 'Deriva postural inducida', icon: '↗️',
         phases: ['Deriva', 'Corrige'],
         hint: 'Registra la deriva inducida y la corrección.' },
@@ -69,6 +60,14 @@ const DEVICE_TYPES = {
     ],
   },
 };
+
+// Dispositivos que ya vienen en la app. Se pueden agregar más desde la app ("vincular desde código").
+const BUILTIN_DEVICES = [
+  { id: 'ballena', type: 'emg', name: 'Ballena Monitor', namePrefix: 'Ballena-EMG',
+    fs: 1000, channels: ['emg_mV'], scale: 10, builtin: true },
+  { id: 'tactsuit', type: 'acc', name: 'TactSuit', namePrefix: 'TactSuit',
+    fs: 100, channels: ['ax_g', 'ay_g', 'az_g'], scale: 1000, builtin: true },
+];
 const CH_COLORS = ['#38bdf8', '#f472b6', '#a3e635', '#fbbf24'];
 
 // ---------------------------------------------------------------------------
@@ -119,11 +118,14 @@ const DB = {
   db: null,
   open() {
     return new Promise((resolve, reject) => {
-      const r = indexedDB.open('captura-ml', 1);
+      const r = indexedDB.open('captura-ml', 2);
       r.onupgradeneeded = () => {
         const d = r.result;
-        d.createObjectStore('projects', { keyPath: 'id' });
-        d.createObjectStore('recordings', { keyPath: 'id' }).createIndex('byProject', 'projectId');
+        if (!d.objectStoreNames.contains('projects')) d.createObjectStore('projects', { keyPath: 'id' });
+        if (!d.objectStoreNames.contains('recordings')) {
+          d.createObjectStore('recordings', { keyPath: 'id' }).createIndex('byProject', 'projectId');
+        }
+        if (!d.objectStoreNames.contains('devices')) d.createObjectStore('devices', { keyPath: 'id' });
       };
       r.onsuccess = () => { this.db = r.result; resolve(); };
       r.onerror = () => reject(r.error);
@@ -254,7 +256,7 @@ const stream = {
   },
 
   async connectBle() {
-    const type = DEVICE_TYPES[state.project.type];
+    const type = state.device;
     const device = await navigator.bluetooth.requestDevice({
       filters: [{ namePrefix: type.namePrefix }, { services: [NUS.service] }],
       optionalServices: [NUS.service],
@@ -289,7 +291,7 @@ const stream = {
   },
 
   startSim() {
-    const type = DEVICE_TYPES[state.project.type];
+    const type = state.device;
     this.stop();
     this.mode = 'sim';
     this.received = 0; this.lost = 0;
@@ -401,7 +403,7 @@ const recorder = {
   },
 
   tick() {
-    const phases = this.movement.phases;
+    const phases = movePhases(this.movement);
     if (this.bpm <= 0) return;
     $('phase').textContent = phases[this.beatIndex % phases.length];
     const met = $('metronome');
@@ -479,7 +481,14 @@ function recToCsv(rec) {
   return lines.join('\n') + '\n';
 }
 // Edge Impulse toma la etiqueta de lo que va antes del primer punto: "flexion_extension.xxx.csv"
-const recFileName = (rec) => `${rec.label}.${slug(state.project.name)}_${pad(rec.n)}_${fileStamp(rec.createdAt)}.csv`;
+// La etiqueta sale del nombre actual de la carpeta (si la renombras, cambia la etiqueta)
+const moveLabel = (m) => slug(m.name);
+const movePhases = (m) => (m.phases && m.phases.length ? m.phases : [m.name]);
+function recFileName(rec) {
+  const m = state.project.movements.find((x) => x.id === rec.label);
+  const label = m ? moveLabel(m) : rec.label;
+  return `${label}.${slug(state.project.name)}_${pad(rec.n)}_${fileStamp(rec.createdAt)}.csv`;
+}
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -602,7 +611,39 @@ function plotLoop() {
 // ---------------------------------------------------------------------------
 // Interfaz
 // ---------------------------------------------------------------------------
-const state = { view: 'home', project: null, movement: null };
+const state = { view: 'home', project: null, movement: null, device: null };
+
+// ---- Dispositivos y proyectos ---------------------------------------------------
+async function getDevices(type) {
+  const custom = (await DB.all('devices')).filter((d) => d.type === type).sort((a, b) => a.createdAt - b.createdAt);
+  return [...BUILTIN_DEVICES.filter((d) => d.type === type), ...custom];
+}
+async function findDevice(id, type) {
+  return (await getDevices(type)).find((d) => d.id === id) || BUILTIN_DEVICES.find((d) => d.type === type);
+}
+// Proyectos de la versión anterior: se les asigna dispositivo y todas las carpetas sugeridas
+async function normalizeProject(p) {
+  let changed = false;
+  if (!p.deviceId) { p.deviceId = BUILTIN_DEVICES.find((d) => d.type === p.type).id; changed = true; }
+  if (!Array.isArray(p.movements)) { p.movements = DEVICE_TYPES[p.type].catalog.map((m) => ({ ...m })); changed = true; }
+  if (changed) await DB.put('projects', p);
+  return p;
+}
+const saveProject = () => DB.put('projects', state.project);
+
+function newCustomMove(name) {
+  return { id: 'm_' + uid().replace(/-/g, '').slice(0, 10), name, icon: '🏷️', phases: [], hint: 'Movimiento agregado por ti.', custom: true };
+}
+// Pide un nombre y revisa que no choque con otra carpeta (Edge Impulse usa el nombre como etiqueta)
+function askMoveName(current, others, title) {
+  const v = prompt(title, current || '');
+  if (v === null) return null;
+  const name = v.trim().slice(0, 50);
+  if (!name) { toast('El nombre no puede ir vacío'); return null; }
+  if (!slug(name).length) { toast('Usa letras o números en el nombre'); return null; }
+  if (others.some((m) => moveLabel(m) === slug(name))) { toast('Ya hay una carpeta con ese nombre'); return null; }
+  return name;
+}
 
 function setBadge(text, cls) {
   const b = $('bleBadge');
@@ -621,6 +662,7 @@ function updateStreamInfo() {
   }
   $('btnConnect').textContent = stream.mode === 'ble' ? 'Desconectar' : 'Conectar';
   $('btnSim').textContent = stream.mode === 'sim' ? 'Detener simulador' : 'Simulador';
+  $('projDeviceSel').disabled = !!stream.mode;
 }
 
 function show(view, push = true) {
@@ -632,65 +674,180 @@ function show(view, push = true) {
   window.scrollTo(0, 0);
 }
 
+// ---- Pantalla 1: nuevo proyecto + lista ----------------------------------------
+const form = { type: 'emg', deviceId: 'ballena', moves: [] };
+
+function resetFormMoves() {
+  form.moves = DEVICE_TYPES[form.type].catalog.map((m) => ({ ...m, on: true }));
+}
+
+async function renderDeviceList() {
+  const list = $('deviceList');
+  const devices = await getDevices(form.type);
+  if (!devices.some((d) => d.id === form.deviceId)) form.deviceId = devices[0].id;
+  list.innerHTML = '';
+  for (const d of devices) {
+    const el = document.createElement('div');
+    el.className = 'item dev' + (d.id === form.deviceId ? ' selected' : '');
+    el.innerHTML = `<span class="radio"></span><div class="grow"><div class="title">${esc(d.name)}</div>
+      <div class="small muted">Bluetooth: “${esc(d.namePrefix)}…” · ${d.fs} Hz · ${esc(d.channels.join(', '))}${d.builtin ? '' : ' · agregado por ti'}</div></div>
+      ${d.builtin ? '' : '<button class="x-btn" title="Quitar dispositivo">✕</button>'}`;
+    el.onclick = () => { form.deviceId = d.id; renderDeviceList(); };
+    const x = el.querySelector('.x-btn');
+    if (x) x.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`¿Quitar el dispositivo “${d.name}”?`)) return;
+      await DB.del('devices', d.id);
+      renderDeviceList();
+    };
+    list.appendChild(el);
+  }
+}
+
+function renderMoveRows() {
+  const list = $('moveRows');
+  list.innerHTML = '';
+  for (const m of form.moves) {
+    const el = document.createElement('div');
+    el.className = 'item move-row' + (m.on ? '' : ' off');
+    el.innerHTML = `<span>${m.icon}</span><span class="name">${esc(m.name)}</span>
+      <button class="ed-btn" title="Cambiar nombre">✏️</button>
+      ${m.on ? '<button class="x-btn" title="Quitar">✕</button>' : '<button class="add-btn">+ Agregar</button>'}`;
+    el.querySelector('.ed-btn').onclick = () => {
+      const name = askMoveName(m.name, form.moves.filter((x) => x !== m), 'Nombre de la carpeta:');
+      if (name) { m.name = name; renderMoveRows(); }
+    };
+    const x = el.querySelector('.x-btn');
+    if (x) x.onclick = () => {
+      if (m.custom) form.moves = form.moves.filter((y) => y !== m); else m.on = false;
+      renderMoveRows();
+    };
+    const add = el.querySelector('.add-btn');
+    if (add) add.onclick = () => { m.on = true; renderMoveRows(); };
+    list.appendChild(el);
+  }
+}
+
 async function renderHome() {
   $('title').textContent = 'Captura ML';
   $('subtitle').textContent = 'Datos para Edge Impulse';
+  await renderDeviceList();
+  renderMoveRows();
   const projects = (await DB.all('projects')).sort((a, b) => b.createdAt - a.createdAt);
   const recs = await DB.all('recordings').catch(() => []);
   const list = $('projectList');
   list.innerHTML = '';
   $('noProjects').hidden = projects.length > 0;
-  for (const p of projects) {
-    const type = DEVICE_TYPES[p.type];
+  for (const p0 of projects) {
+    const p = await normalizeProject(p0);
+    const dev = await findDevice(p.deviceId, p.type);
     const count = recs.filter((r) => r.projectId === p.id).length;
     const el = document.createElement('div');
     el.className = 'item clickable';
     el.innerHTML = `<div class="grow"><div class="title">${esc(p.name)}</div>
-      <div class="small muted">${esc(type.label)} · ${esc(type.project)} · ${count} grabaciones · creado ${fmtDate(p.createdAt)}</div></div>
+      <div class="small muted">${DEVICE_TYPES[p.type].label} · ${esc(dev.name)} · ${p.movements.length} carpetas · ${count} grabaciones · creado ${fmtDate(p.createdAt)}</div></div>
       <span class="muted">›</span>`;
     el.onclick = () => openProject(p);
     list.appendChild(el);
   }
 }
 
+// ---- Pantalla 2: proyecto -------------------------------------------------------
 async function openProject(p, push = true) {
-  state.project = p;
+  state.project = await normalizeProject(p);
   state.movement = null;
+  state.device = await findDevice(p.deviceId, p.type);
   const type = DEVICE_TYPES[p.type];
   $('title').textContent = p.name;
-  $('subtitle').textContent = `${type.label} · ${type.project}`;
-  $('projDevice').textContent = `Busca dispositivos que empiecen con “${type.namePrefix}”`;
-  if (!stream.ring || stream.channels.length !== type.channels.length || stream.fs !== type.fs) {
-    stream.configure(type.fs, type.channels, type.scale);
+  $('subtitle').textContent = `${type.label} · ${state.device.name}`;
+  const d = state.device;
+  if (!stream.mode && (!stream.ring || stream.channels.join() !== d.channels.join() || stream.fs !== d.fs)) {
+    stream.configure(d.fs, d.channels, d.scale);
   }
-  updateStreamInfo();
   show('project', push);
   await renderProject();
 }
 
 async function renderProject() {
-  const type = DEVICE_TYPES[state.project.type];
-  const recs = await DB.recordings(state.project.id);
+  const p = state.project;
+  const d = state.device;
+  $('projDevice').textContent = `Al conectar, busca dispositivos que empiecen con “${d.namePrefix}”`;
+  const sel = $('projDeviceSel');
+  sel.innerHTML = (await getDevices(p.type))
+    .map((x) => `<option value="${esc(x.id)}"${x.id === d.id ? ' selected' : ''}>${esc(x.name)} (${esc(x.namePrefix)}…)</option>`).join('');
+  updateStreamInfo();
+
+  const recs = await DB.recordings(p.id);
   const grid = $('folderGrid');
   grid.innerHTML = '';
-  for (const m of type.movements) {
+  for (const m of p.movements) {
     const n = recs.filter((r) => r.label === m.id).length;
-    const b = document.createElement('button');
+    const b = document.createElement('div');
     b.className = 'folder' + (n >= MAX_RECS ? ' full' : '');
-    b.innerHTML = `<span class="icon">📁 ${m.icon}</span><span class="name">${esc(m.name)}</span>
+    b.tabIndex = 0;
+    b.setAttribute('role', 'button');
+    b.innerHTML = `<div class="corner"><button class="ed-btn" title="Cambiar nombre">✏️</button><button class="x-btn" title="Quitar carpeta">✕</button></div>
+      <span class="icon">📁 ${m.icon}</span><span class="name">${esc(m.name)}</span>
       <span class="small muted">${n} / ${MAX_RECS} grabaciones</span>
       <div class="bar"><div style="width:${(n / MAX_RECS) * 100}%"></div></div>`;
     b.onclick = () => openFolder(m);
+    b.onkeydown = (e) => { if (e.key === 'Enter') openFolder(m); };
+    b.querySelector('.ed-btn').onclick = async (e) => {
+      e.stopPropagation();
+      const name = askMoveName(m.name, p.movements.filter((x) => x !== m), 'Nuevo nombre de la carpeta (también es la etiqueta en Edge Impulse):');
+      if (!name) return;
+      m.name = name;
+      await saveProject();
+      renderProject();
+    };
+    b.querySelector('.x-btn').onclick = async (e) => {
+      e.stopPropagation();
+      const msg = n ? `La carpeta “${m.name}” tiene ${n} grabaciones. ¿Quitarla y borrar sus grabaciones?` : `¿Quitar la carpeta “${m.name}”?`;
+      if (!confirm(msg)) return;
+      for (const r of recs.filter((r) => r.label === m.id)) await DB.del('recordings', r.id);
+      p.movements = p.movements.filter((x) => x !== m);
+      await saveProject();
+      renderProject();
+    };
     grid.appendChild(b);
   }
+  if (!p.movements.length) grid.innerHTML = '<p class="muted small">No hay carpetas. Agrega una abajo.</p>';
+
+  // Opciones para agregar: sugeridas que faltan + otra opción
+  const add = $('addMoves');
+  add.innerHTML = '';
+  for (const m of DEVICE_TYPES[p.type].catalog.filter((c) => !p.movements.some((x) => x.id === c.id))) {
+    const b = document.createElement('button');
+    b.className = 'add-btn';
+    b.textContent = `+ ${m.name}`;
+    b.onclick = async () => {
+      if (p.movements.some((x) => moveLabel(x) === moveLabel(m))) { toast('Ya hay una carpeta con ese nombre'); return; }
+      p.movements.push({ ...m });
+      await saveProject();
+      renderProject();
+    };
+    add.appendChild(b);
+  }
+  const other = document.createElement('button');
+  other.className = 'add-btn';
+  other.textContent = '+ Agregar otra opción';
+  other.onclick = async () => {
+    const name = askMoveName('', p.movements, 'Nombre del nuevo movimiento:');
+    if (!name) return;
+    p.movements.push(newCustomMove(name));
+    await saveProject();
+    renderProject();
+  };
+  add.appendChild(other);
   $('btnZip').disabled = recs.length === 0;
 }
 
+// ---- Pantalla 3: carpeta --------------------------------------------------------
 async function openFolder(m, push = true) {
   state.movement = m;
   $('title').textContent = `📁 ${m.name}`;
   $('subtitle').textContent = state.project.name;
-  $('folderHint').textContent = m.hint;
+  $('folderHint').textContent = m.hint || '';
   $('phase').textContent = 'Listo';
   $('metronome').className = 'metronome';
   $('progressBar').style.width = '0';
@@ -708,6 +865,7 @@ async function renderFolder() {
   $('noRecs').hidden = recs.length > 0;
   const list = $('recList');
   list.innerHTML = '';
+  const sym = state.project.type === 'emg';
   for (const r of recs) {
     const el = document.createElement('div');
     el.className = 'item rec';
@@ -721,7 +879,7 @@ async function renderFolder() {
         <button class="btn danger ghost" data-a="del">🗑</button>
       </div>`;
     list.appendChild(el);
-    drawSignal(el.querySelector('canvas'), r.data, r.channels.length, { thumb: true, symmetric: state.project.type === 'emg' });
+    drawSignal(el.querySelector('canvas'), r.data, r.channels.length, { thumb: true, symmetric: sym });
     el.querySelector('[data-a=ver]').onclick = () => preview(r);
     el.querySelector('[data-a=csv]').onclick = () => download(new Blob([recToCsv(r)], { type: 'text/csv' }), recFileName(r));
     el.querySelector('[data-a=del]').onclick = async () => {
@@ -770,6 +928,7 @@ function preview(r) {
   requestAnimationFrame(() => drawSignal($('previewPlot'), r.data, r.channels.length, { symmetric: state.project.type === 'emg' }));
 }
 
+// ---- Navegación (botón atrás de Android incluido) -------------------------------
 async function goBack() {
   if (recorder.active || recorder.counting) return;
   history.back();
@@ -779,30 +938,26 @@ async function handleNav(st) {
   if (recorder.active || recorder.counting) recorder.cancel('Grabación cancelada');
   if (!st || st.view === 'home') {
     await stream.stop();
-    state.project = null; state.movement = null;
+    state.project = null; state.movement = null; state.device = null;
     show('home', false);
     await renderHome();
     return;
   }
+  const p = state.project?.id === st.pid ? state.project : (await DB.all('projects')).find((x) => x.id === st.pid);
+  if (!p) return handleNav(null);
   if (st.view === 'project') {
-    if (state.project?.id === st.pid) {
+    if (state.project?.id === p.id) {
       state.movement = null;
-      const type = DEVICE_TYPES[state.project.type];
-      $('title').textContent = state.project.name;
-      $('subtitle').textContent = `${type.label} · ${type.project}`;
+      $('title').textContent = p.name;
+      $('subtitle').textContent = `${DEVICE_TYPES[p.type].label} · ${state.device.name}`;
       show('project', false);
       await renderProject();
-    } else {
-      const p = (await DB.all('projects')).find((x) => x.id === st.pid);
-      if (p) await openProject(p, false); else await handleNav(null);
-    }
+    } else await openProject(p, false);
   }
   if (st.view === 'folder') {
-    const p = state.project?.id === st.pid ? state.project : (await DB.all('projects')).find((x) => x.id === st.pid);
-    if (!p) return handleNav(null);
     if (state.project?.id !== p.id) await openProject(p, false);
-    const m = DEVICE_TYPES[p.type].movements.find((x) => x.id === st.mid);
-    if (m) await openFolder(m, false);
+    const m = state.project.movements.find((x) => x.id === st.mid);
+    if (m) await openFolder(m, false); else history.back();
   }
 }
 
@@ -810,16 +965,69 @@ async function handleNav(st) {
 // Eventos
 // ---------------------------------------------------------------------------
 function bindEvents() {
+  for (const r of document.querySelectorAll('input[name=newType]')) {
+    r.onchange = () => {
+      form.type = r.value;
+      form.deviceId = BUILTIN_DEVICES.find((d) => d.type === form.type).id;
+      resetFormMoves();
+      renderDeviceList();
+      renderMoveRows();
+    };
+  }
+  $('btnNewMoveCustom').onclick = () => {
+    const name = askMoveName('', form.moves, 'Nombre del nuevo movimiento:');
+    if (name) { form.moves.push({ ...newCustomMove(name), on: true }); renderMoveRows(); }
+  };
+
+  // Agregar dispositivo ("vincular desde código")
+  $('btnAddDevice').onclick = () => {
+    const isEmg = form.type === 'emg';
+    $('devName').value = '';
+    $('devPrefix').value = '';
+    $('devFs').value = isEmg ? 1000 : 100;
+    $('devScale').value = isEmg ? 10 : 1000;
+    $('devChannels').value = isEmg ? 'emg_mV' : 'ax_g, ay_g, az_g';
+    $('deviceDlg').showModal();
+  };
+  $('devSave').onclick = async (e) => {
+    e.preventDefault();
+    const name = $('devName').value.trim();
+    const prefix = $('devPrefix').value.trim();
+    const fs = Number($('devFs').value);
+    const scale = Number($('devScale').value) || 1;
+    const channels = $('devChannels').value.split(',').map((c) => c.trim().replace(/[^\w.-]/g, '_')).filter(Boolean);
+    if (!name || !prefix) { toast('Escribe el nombre y el nombre Bluetooth'); return; }
+    if (!(fs > 0) || !channels.length) { toast('Revisa la frecuencia y los canales'); return; }
+    const d = { id: 'd_' + uid().replace(/-/g, '').slice(0, 10), type: form.type, name, namePrefix: prefix, fs, channels, scale, createdAt: Date.now() };
+    await DB.put('devices', d);
+    form.deviceId = d.id;
+    $('deviceDlg').close();
+    renderDeviceList();
+    toast(`Dispositivo “${name}” agregado`);
+  };
+
   $('btnCreate').onclick = async () => {
     const name = $('newName').value.trim();
     if (!name) { toast('Escribe un nombre para el proyecto'); $('newName').focus(); return; }
-    const type = document.querySelector('input[name=newType]:checked').value;
-    const p = { id: uid(), name, type, createdAt: Date.now() };
+    const moves = form.moves.filter((m) => m.on).map(({ on, ...m }) => m);
+    if (!moves.length) { toast('Agrega al menos un movimiento'); return; }
+    const p = { id: uid(), name, type: form.type, deviceId: form.deviceId, movements: moves, createdAt: Date.now() };
     await DB.put('projects', p);
     $('newName').value = '';
+    resetFormMoves();
     openProject(p);
   };
   $('newName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btnCreate').click(); });
+
+  $('projDeviceSel').onchange = async () => {
+    const d = await findDevice($('projDeviceSel').value, state.project.type);
+    state.device = d;
+    state.project.deviceId = d.id;
+    await saveProject();
+    stream.configure(d.fs, d.channels, d.scale);
+    $('subtitle').textContent = `${DEVICE_TYPES[state.project.type].label} · ${d.name}`;
+    renderProject();
+  };
 
   $('btnBack').onclick = goBack;
   window.addEventListener('popstate', (e) => handleNav(e.state));
@@ -849,9 +1057,13 @@ function bindEvents() {
     if (!recs.length) return;
     const files = recs.sort((a, b) => a.label.localeCompare(b.label) || a.n - b.n)
       .map((r) => ({ name: recFileName(r), data: recToCsv(r) }));
-    const readme = `Proyecto: ${state.project.name}\nDispositivo: ${DEVICE_TYPES[state.project.type].label}\n` +
-      `Exportado: ${fmtDate(Date.now())} (hora MTY)\n\nEdge Impulse > Data acquisition > Upload data:\n` +
-      `elige estos CSV y marca "Infer from filename" en Label (la etiqueta es lo que va antes del primer punto).\n`;
+    const labels = state.project.movements.map((m) => `  ${moveLabel(m)}  =  ${m.name}`).join('\n');
+    const readme = `Proyecto: ${state.project.name}\nDispositivo: ${state.device.name} (${DEVICE_TYPES[state.project.type].label})\n` +
+      `Exportado: ${fmtDate(Date.now())} (hora MTY)\n\nEtiquetas:\n${labels}\n\n` +
+      `Edge Impulse > Data acquisition > Upload data:\n` +
+      `1. Descomprime este ZIP.\n2. Selecciona todos los .csv.\n` +
+      `3. En "Label" elige "Infer from filename" (la etiqueta es lo que va antes del primer punto).\n` +
+      `4. "Automatically split between training and testing" (80/20).\n`;
     files.push({ name: 'LEEME.txt', data: readme });
     download(makeZip(files), `${slug(state.project.name)}_${fileStamp(Date.now())}.zip`);
   };
@@ -872,6 +1084,7 @@ async function main() {
   $('bleWarning').hidden = !!navigator.bluetooth;
   await DB.open();
   try { await navigator.storage?.persist?.(); } catch (_) { /* nada */ }
+  resetFormMoves();
   bindEvents();
   history.replaceState({ view: 'home' }, '');
   await renderHome();

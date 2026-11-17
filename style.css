@@ -151,3 +151,26 @@ dialog h3 { margin: 0; }
   .grid { grid-template-columns: 1fr 1fr; }
   .folder { min-height: 100px; padding: 12px; }
 }
+
+/* ---- v2: pasos, dispositivos, recuadros de movimientos ---- */
+.step { display: flex; align-items: center; gap: 8px; font-size: .88rem; color: var(--text); font-weight: 600; margin-top: 4px; }
+.step span { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #082f49; display: inline-flex; align-items: center; justify-content: center; font-size: .75rem; flex: none; }
+.small-btn { padding: 8px 12px; font-size: .85rem; align-self: flex-start; }
+.dev { cursor: pointer; }
+.dev.selected { border-color: var(--accent); background: rgba(56, 189, 248, .08); }
+.dev .radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); flex: none; }
+.dev.selected .radio { border-color: var(--accent); background: radial-gradient(var(--accent) 45%, transparent 50%); }
+.move-row .name { flex: 1; font-weight: 600; }
+.move-row.off .name { color: var(--muted); font-weight: 400; }
+.move-row .btn, .dev .btn { padding: 6px 10px; font-size: .8rem; }
+.x-btn { background: transparent; border: 1px solid #9f1239; color: #fda4af; border-radius: 8px; cursor: pointer; font-size: .85rem; padding: 4px 9px; }
+.add-btn { background: transparent; border: 1px solid var(--accent); color: var(--accent); border-radius: 8px; cursor: pointer; font-size: .8rem; padding: 5px 10px; font-weight: 600; }
+.ed-btn { background: transparent; border: 1px solid var(--line); color: var(--text); border-radius: 8px; cursor: pointer; font-size: .8rem; padding: 4px 8px; }
+.folder { position: relative; }
+.folder .corner { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; }
+.folder .name { padding-right: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.bottom-actions { margin-top: 10px; padding-top: 14px; border-top: 1px solid var(--line); justify-content: space-between; }
+input[type=number] { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; width: 100%; }
+dialog .settings { grid-template-columns: 1fr 1fr; }
+code { font-size: .8em; background: #0b1222; padding: 1px 4px; border-radius: 4px; }

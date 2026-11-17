@@ -3,10 +3,13 @@
 App web para grabar datos de entrenamiento por Bluetooth desde un ESP32 y exportarlos como CSV para **Edge Impulse**.
 Sirve para dos proyectos:
 
-| Proyecto | Dispositivo | Bluetooth | Señal | Carpetas (etiquetas) |
+| Tipo | Dispositivo incluido | Bluetooth | Señal | Carpetas sugeridas |
 |---|---|---|---|---|
-| **Ballena Monitor** | EMG | `Ballena-EMG-ML` | 1 canal, filtrada, 1000 Hz (`emg_mV`) | `flexion_extension`, `pronacion_supinacion`, `descanso` |
-| **TactSuit** (sistema táctil de orientación espacial) | Acelerómetro | `TactSuit-IMU` | 3 canales, 100 Hz (`ax_g`, `ay_g`, `az_g`) | `limites_estabilidad`, `linea_base`, `deriva_postural`, `recuperacion_perturbaciones` |
+| EMG | **Ballena Monitor** | `Ballena-EMG-ML` | 1 canal, filtrada, 1000 Hz (`emg_mV`) | Extensión y flexión · Reposo/equilibrio · Pronación y supinación |
+| Acelerómetro | **TactSuit** (sistema táctil de orientación espacial) | `TactSuit-IMU` | 3 canales, 100 Hz (`ax_g`, `ay_g`, `az_g`) | Línea base/equilibrio · Inclinaciones voluntarias · Deriva postural inducida · Recuperación de perturbaciones |
+
+Se pueden **vincular otros ESP** desde la app (*+ Agregar otro dispositivo*), siempre que usen el protocolo de abajo.
+Las carpetas se pueden quitar (✕), renombrar (✏️) o agregar (*+ Agregar otra opción*). **El nombre de la carpeta es la etiqueta en Edge Impulse.**
 
 Los datos **no se guardan en el ESP**: se guardan en el navegador que está viendo la señal (IndexedDB).
 No se borran al cerrar la página, pero sí si borras los datos del sitio en Chrome. **Descarga el ZIP al terminar cada sesión.**
@@ -14,8 +17,8 @@ No se borran al cerrar la página, pero sí si borras los datos del sitio en Chr
 ## Cómo se usa
 
 1. Abre la app en **Chrome** (Android o computadora). En iPhone no funciona porque Safari no tiene Web Bluetooth.
-2. **Nuevo proyecto** → nombre + dispositivo (EMG o Acelerómetro).
-3. **Conectar** → elige `Ballena-EMG-ML` o `TactSuit-IMU`. Si no tienes el ESP a la mano, usa **Simulador** para probar (datos falsos).
+2. **Nuevo proyecto** → nombre (p. ej. *EMG Ballena*) → 1) tipo (EMG o Acelerómetro) → 2) dispositivo a vincular → 3) movimientos que entran al machine learning.
+3. **Conectar** → elige `Ballena-EMG-ML` o `TactSuit-IMU` (o el que hayas agregado). Si no tienes el ESP a la mano, usa **Simulador** para probar (datos falsos).
 4. Entra a la **carpeta** del movimiento → elige duración (máx. 60 s) y ritmo → **Grabar**.
    Hay una cuenta regresiva de 3 s y luego el metrónomo marca cada movimiento (p. ej. *Flexión* / *Extensión*).
 5. Al terminar, la grabación aparece con **fecha y hora de Monterrey**. Vuelve a grabar; máximo **30 por movimiento**.
@@ -26,8 +29,10 @@ No se borran al cerrar la página, pero sí si borras los datos del sitio en Chr
 1. Descomprime el ZIP.
 2. Edge Impulse → **Data acquisition** → **Upload data** → selecciona los `.csv`.
 3. En *Label* elige **Infer from filename**. La etiqueta es lo que va antes del primer punto:
-   `flexion_extension.sujeto_01_03_20261117-115230.csv` → etiqueta `flexion_extension`.
-4. Si Edge Impulse abre el **CSV Wizard** la primera vez: la columna de tiempo es `timestamp` (milisegundos) y las demás son los valores.
+   `extension_y_flexion.emg_ballena_03_20261117-115230.csv` → etiqueta `extension_y_flexion`.
+   (Sin acentos ni espacios; el `LEEME.txt` del ZIP trae la lista de etiquetas.)
+4. Deja marcado *Automatically split between training and testing* (80 % entrenamiento / 20 % prueba).
+5. Si Edge Impulse abre el **CSV Wizard** la primera vez: la columna de tiempo es `timestamp` (milisegundos) y las demás son los valores.
 
 Formato de cada CSV:
 
