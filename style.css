@@ -167,10 +167,11 @@ dialog h3 { margin: 0; }
 .add-btn { background: transparent; border: 1px solid var(--accent); color: var(--accent); border-radius: 8px; cursor: pointer; font-size: .8rem; padding: 5px 10px; font-weight: 600; }
 .ed-btn { background: transparent; border: 1px solid var(--line); color: var(--text); border-radius: 8px; cursor: pointer; font-size: .8rem; padding: 4px 8px; }
 .folder { position: relative; }
-.folder .corner { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; }
+.folder-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
 .folder .name { padding-right: 0; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .bottom-actions { margin-top: 10px; padding-top: 14px; border-top: 1px solid var(--line); justify-content: space-between; }
 input[type=number] { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; width: 100%; }
 dialog .settings { grid-template-columns: 1fr 1fr; }
 code { font-size: .8em; background: #0b1222; padding: 1px 4px; border-radius: 4px; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 3px; }

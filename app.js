@@ -30,13 +30,13 @@ const DEVICE_TYPES = {
     label: 'EMG',
     plotSeconds: 3,
     catalog: [
-      { id: 'flexion_extension', name: 'Extensión y flexión', icon: '✋',
+      { id: 'flexion_extension', name: 'Extensión y flexión',
         phases: ['Extensión', 'Flexión'],
         hint: 'Extiende y flexiona la muñeca siguiendo el ritmo: un movimiento por cada pulso.' },
-      { id: 'descanso', name: 'Reposo/equilibrio', icon: '😌',
+      { id: 'descanso', name: 'Reposo/equilibrio',
         phases: ['Relaja'],
         hint: 'Mano y antebrazo relajados, sin mover. Es la clase de “sin movimiento”.' },
-      { id: 'pronacion_supinacion', name: 'Pronación y supinación', icon: '🔄',
+      { id: 'pronacion_supinacion', name: 'Pronación y supinación',
         phases: ['Pronación', 'Supinación'],
         hint: 'Gira el antebrazo (palma abajo / palma arriba) siguiendo el ritmo.' },
     ],
@@ -45,16 +45,16 @@ const DEVICE_TYPES = {
     label: 'Acelerómetro',
     plotSeconds: 10,
     catalog: [
-      { id: 'linea_base', name: 'Línea base/equilibrio', icon: '🧍',
+      { id: 'linea_base', name: 'Línea base/equilibrio',
         phases: ['Quieto'],
         hint: 'De pie, quieto y relajado.' },
-      { id: 'limites_estabilidad', name: 'Inclinaciones voluntarias', icon: '🎯',
+      { id: 'limites_estabilidad', name: 'Inclinaciones voluntarias',
         phases: ['Inclina', 'Regresa'],
         hint: 'Inclínate lo más posible sin dar un paso y regresa al centro, siguiendo el ritmo.' },
-      { id: 'deriva_postural', name: 'Deriva postural inducida', icon: '↗️',
+      { id: 'deriva_postural', name: 'Deriva postural inducida',
         phases: ['Deriva', 'Corrige'],
         hint: 'Registra la deriva inducida y la corrección.' },
-      { id: 'recuperacion_perturbaciones', name: 'Recuperación de perturbaciones', icon: '⚡',
+      { id: 'recuperacion_perturbaciones', name: 'Recuperación de perturbaciones',
         phases: ['Perturbación', 'Recupera'],
         hint: 'Aplica la perturbación y deja que la persona recupere el equilibrio.' },
     ],
@@ -601,7 +601,7 @@ function plotLoop() {
       const left = (recorder.target - recorder.pos) / recorder.fs;
       const stalled = performance.now() - stream.lastDataAt > 1500;
       $('recStatus').textContent = stalled
-        ? '⚠️ No llegan datos del dispositivo…'
+        ? 'No llegan datos del dispositivo…'
         : `Grabando · faltan ${left.toFixed(0)} s` + (recorder.lost ? ` · ${recorder.lost} muestras perdidas` : '');
     }
   }
@@ -632,7 +632,7 @@ async function normalizeProject(p) {
 const saveProject = () => DB.put('projects', state.project);
 
 function newCustomMove(name) {
-  return { id: 'm_' + uid().replace(/-/g, '').slice(0, 10), name, icon: '🏷️', phases: [], hint: 'Movimiento agregado por ti.', custom: true };
+  return { id: 'm_' + uid().replace(/-/g, '').slice(0, 10), name, phases: [], hint: 'Movimiento agregado por ti.', custom: true };
 }
 // Pide un nombre y revisa que no choque con otra carpeta (Edge Impulse usa el nombre como etiqueta)
 function askMoveName(current, others, title) {
@@ -658,7 +658,7 @@ function updateStreamInfo() {
   else {
     el.textContent = `${stream.devName} · ${stream.fs} Hz · ${stream.channels.length} canal(es)`;
     $('plotLegend').innerHTML = stream.channels
-      .map((c, i) => `<span style="color:${CH_COLORS[i % CH_COLORS.length]}">■</span> ${esc(c)}`).join('&nbsp;&nbsp;');
+      .map((c, i) => `<span class="swatch" style="background:${CH_COLORS[i % CH_COLORS.length]}"></span> ${esc(c)}`).join('&nbsp;&nbsp;');
   }
   $('btnConnect').textContent = stream.mode === 'ble' ? 'Desconectar' : 'Conectar';
   $('btnSim').textContent = stream.mode === 'sim' ? 'Detener simulador' : 'Simulador';
@@ -710,8 +710,8 @@ function renderMoveRows() {
   for (const m of form.moves) {
     const el = document.createElement('div');
     el.className = 'item move-row' + (m.on ? '' : ' off');
-    el.innerHTML = `<span>${m.icon}</span><span class="name">${esc(m.name)}</span>
-      <button class="ed-btn" title="Cambiar nombre">✏️</button>
+    el.innerHTML = `<span class="name">${esc(m.name)}</span>
+      <button class="ed-btn">Renombrar</button>
       ${m.on ? '<button class="x-btn" title="Quitar">✕</button>' : '<button class="add-btn">+ Agregar</button>'}`;
     el.querySelector('.ed-btn').onclick = () => {
       const name = askMoveName(m.name, form.moves.filter((x) => x !== m), 'Nombre de la carpeta:');
@@ -786,10 +786,10 @@ async function renderProject() {
     b.className = 'folder' + (n >= MAX_RECS ? ' full' : '');
     b.tabIndex = 0;
     b.setAttribute('role', 'button');
-    b.innerHTML = `<div class="corner"><button class="ed-btn" title="Cambiar nombre">✏️</button><button class="x-btn" title="Quitar carpeta">✕</button></div>
-      <span class="icon">📁 ${m.icon}</span><span class="name">${esc(m.name)}</span>
+    b.innerHTML = `<span class="name">${esc(m.name)}</span>
       <span class="small muted">${n} / ${MAX_RECS} grabaciones</span>
-      <div class="bar"><div style="width:${(n / MAX_RECS) * 100}%"></div></div>`;
+      <div class="bar"><div style="width:${(n / MAX_RECS) * 100}%"></div></div>
+      <div class="folder-actions"><button class="ed-btn">Renombrar</button><button class="x-btn" title="Quitar carpeta">✕</button></div>`;
     b.onclick = () => openFolder(m);
     b.onkeydown = (e) => { if (e.key === 'Enter') openFolder(m); };
     b.querySelector('.ed-btn').onclick = async (e) => {
@@ -845,7 +845,7 @@ async function renderProject() {
 // ---- Pantalla 3: carpeta --------------------------------------------------------
 async function openFolder(m, push = true) {
   state.movement = m;
-  $('title').textContent = `📁 ${m.name}`;
+  $('title').textContent = m.name;
   $('subtitle').textContent = state.project.name;
   $('folderHint').textContent = m.hint || '';
   $('phase').textContent = 'Listo';
@@ -872,11 +872,11 @@ async function renderFolder() {
     const secs = (r.frames / r.fs).toFixed(1);
     el.innerHTML = `<span class="num">#${r.n}</span><canvas></canvas>
       <div class="grow"><div class="title">${fmtDate(r.createdAt)}</div>
-      <div class="small muted">hora MTY · ${secs} s · ${r.frames.toLocaleString('es-MX')} muestras · ${r.fs} Hz${r.lost ? ` · ⚠️ ${r.lost} perdidas` : ''}${r.source === 'simulador' ? ' · simulador' : ''}</div></div>
+      <div class="small muted">hora MTY · ${secs} s · ${r.frames.toLocaleString('es-MX')} muestras · ${r.fs} Hz${r.lost ? ` · ${r.lost} muestras perdidas` : ''}${r.source === 'simulador' ? ' · simulador' : ''}</div></div>
       <div class="actions">
         <button class="btn" data-a="ver">Ver</button>
         <button class="btn" data-a="csv">CSV</button>
-        <button class="btn danger ghost" data-a="del">🗑</button>
+        <button class="btn danger ghost" data-a="del">Borrar</button>
       </div>`;
     list.appendChild(el);
     drawSignal(el.querySelector('canvas'), r.data, r.channels.length, { thumb: true, symmetric: sym });
@@ -897,7 +897,7 @@ function updateRecordButton(count) {
   const full = folderCountCache >= MAX_RECS;
   const busy = recorder.active || recorder.counting;
   $('btnRecord').disabled = full || !stream.mode;
-  $('btnRecord').textContent = full ? `Llegaste a ${MAX_RECS} grabaciones` : (folderCountCache ? '● Grabar otra vez' : '● Grabar');
+  $('btnRecord').textContent = full ? `Llegaste a ${MAX_RECS} grabaciones` : (folderCountCache ? 'Grabar otra vez' : 'Grabar');
   $('btnRecord').hidden = busy;
   if (!busy && state.view === 'folder') {
     $('recStatus').textContent = !stream.mode ? 'Regresa y conecta el dispositivo (o el simulador) para grabar.' : '';
@@ -922,7 +922,7 @@ function setRecordingUI(on) {
 function preview(r) {
   $('previewTitle').textContent = `#${r.n} · ${state.movement.name}`;
   $('previewInfo').innerHTML = `${fmtDate(r.createdAt)} (hora MTY) · ${(r.frames / r.fs).toFixed(1)} s · ${r.fs} Hz · ` +
-    r.channels.map((c, i) => `<span style="color:${CH_COLORS[i % CH_COLORS.length]}">■</span> ${esc(c)}`).join(' ') +
+    r.channels.map((c, i) => `<span class="swatch" style="background:${CH_COLORS[i % CH_COLORS.length]}"></span> ${esc(c)}`).join(' ') +
     `<br>Archivo: ${esc(recFileName(r))}`;
   $('previewDlg').showModal();
   requestAnimationFrame(() => drawSignal($('previewPlot'), r.data, r.channels.length, { symmetric: state.project.type === 'emg' }));
