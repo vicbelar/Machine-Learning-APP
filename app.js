@@ -120,7 +120,7 @@ const BUILTIN_DEVICES = [
   { id: 'tactsuit', type: 'acc', name: 'TactSuit', namePrefix: 'TactSuit',
     fs: 100, channels: ['ax_g', 'ay_g', 'az_g'], scale: 1000, builtin: true },
 ];
-const CH_COLORS = ['#38bdf8', '#f472b6', '#a3e635', '#fbbf24'];
+const CH_COLORS = ['#1f7fb0', '#e0575b', '#2f9e6a', '#e8b54a'];
 
 // ---------------------------------------------------------------------------
 // Utilidades
@@ -886,7 +886,7 @@ function drawSignal(cv, data, nCh, opts = {}) {
   ctx.clearRect(0, 0, w, h);
   const frames = Math.floor(data.length / nCh);
   if (!opts.thumb) {
-    ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+    ctx.strokeStyle = '#d4e5ee'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
   }
   if (frames < 2) return;
@@ -900,7 +900,7 @@ function drawSignal(cv, data, nCh, opts = {}) {
   const y = (v) => h - ((v - lo) / (hi - lo)) * h;
   const usedW = Math.round((frames / totalFrames) * w);
   if (opts.bands) {   // ventanas de movimiento sombreadas
-    ctx.fillStyle = 'rgba(74, 222, 128, .14)';
+    ctx.fillStyle = 'rgba(47, 158, 106, .14)';
     for (const [a, b] of opts.bands) ctx.fillRect(a * usedW, 0, (b - a) * usedW, h);
   }
   for (let c = 0; c < nCh; c++) {
@@ -920,7 +920,7 @@ function drawSignal(cv, data, nCh, opts = {}) {
     ctx.stroke();
   }
   if (!opts.thumb) {
-    ctx.fillStyle = '#64748b'; ctx.font = `${11 * dpr}px system-ui`;
+    ctx.fillStyle = '#5f7d90'; ctx.font = `${11 * dpr}px Nunito, system-ui`;
     ctx.fillText(hi.toFixed(2), 4 * dpr, 12 * dpr);
     ctx.fillText(lo.toFixed(2), 4 * dpr, h - 4 * dpr);
   }
@@ -1073,8 +1073,8 @@ function renderMoveRows() {
 }
 
 async function renderHome() {
-  $('title').textContent = 'Captura ML';
-  $('subtitle').textContent = 'Datos para Edge Impulse';
+  $('title').textContent = 'PERLA · Captura ML';
+  $('subtitle').textContent = 'Datos de EMG para Edge Impulse';
   await renderDeviceList();
   renderMoveRows();
   const projects = (await DB.all('projects')).sort((a, b) => b.createdAt - a.createdAt);
