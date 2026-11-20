@@ -1,125 +1,96 @@
-# Captura ML · EMG / Acelerómetro → Edge Impulse
+# PERLA · Report 1: the data stage
 
-App web para grabar datos de entrenamiento por Bluetooth desde un ESP32 y exportarlos como CSV para **Edge Impulse**.
-Sirve para dos proyectos:
+Course: M6 Machine Learning and IoT apps. Team 6, group 604.
 
-| Tipo | Dispositivo incluido | Bluetooth | Señal | Carpetas sugeridas |
-|---|---|---|---|---|
-| EMG (PERLA) | **Ballena Monitor** | `Ballena-EMG-ML` | 1000 Hz: señal cruda `raw_mV` + filtrada `emg_mV` | No usa carpetas: **protocolo de trials** (ver abajo) |
-| Acelerómetro | **TactSuit** (sistema táctil de orientación espacial) | `TactSuit-IMU` | 3 canales, 100 Hz (`ax_g`, `ay_g`, `az_g`) | Línea base/equilibrio · Inclinaciones voluntarias · Deriva postural inducida · Recuperación de perturbaciones |
+Project: **PERLA** (Plataforma Electromiográfica de Rehabilitación Lúdica Adaptativa), a rehabilitation game for children with cerebral palsy at Instituto Nuevo Amanecer. In PERLA, the child closes the hand and a robotic turtle moves. Today the turtle moves when the RMS of one surface EMG channel passes a threshold. Here we build the data to replace that threshold with a model: **tell "close and open the hand" from rest, with one muscle signal of the forearm.**
 
-Se pueden **vincular otros ESP** desde la app (*+ Agregar otro dispositivo*); el ESP debe usar el protocolo de abajo.
-Las carpetas se pueden quitar (✕), renombrar (✏️) o agregar (*+ Agregar otra opción*). **El nombre de la carpeta es la etiqueta en Edge Impulse.**
+> Lines marked `[TODO]` are filled after the recordings. Remove the marks before the tag `v1-report`.
 
-Los datos **no se guardan en el ESP**: se guardan en el navegador que está viendo la señal (IndexedDB).
-No se borran al cerrar la página, pero sí si borras los datos del sitio en Chrome. **Descarga el ZIP al terminar cada sesión.**
+## The team
 
-## Proyectos EMG (PERLA): protocolo del curso
+| Member code | GitHub user | In charge of | AI tool |
+|---|---|---|---|
+| M01 | @[TODO] | data and metadata | [TODO] |
+| M02 | @vicbelar | recording app (Captura ML) | [TODO] |
+| M03 | @a00842656-spec | ESP32 firmware, trial protocol in the app, quality report | Claude |
+| M04 | @[TODO] | protocol, cue video and photos | [TODO] |
 
-Los proyectos EMG nuevos siguen el método del Report 1 (una persona, **un movimiento**, dos clases: movimiento y reposo):
+Every member has at least one commit. See the commit list of this repository. We measure one person, member [TODO M0x]. In the data that person has the code P01.
 
-1. **Nuevo proyecto** → tipo **EMG** → **Crear proyecto**.
-2. En **Protocolo** → *Editar protocolo…* se ponen el movimiento (por defecto *Cerrar y abrir la mano*), los tiempos
-   del trial, los trials por grabación, las sesiones de prueba y los datos de los electrodos (distancia, ganancia…).
-   Todo eso se copia a `data/metadata.csv`. **No cambiarlo a mitad del estudio.**
-3. **Conectar** (o **Simulador** para probar).
-4. Entra a **Sesión S01**. Coloca electrodos nuevos, toma la foto (sin cara) y presiona **Grabar R01**.
-   Tras una cuenta de 3 s, la pantalla guía a la persona en cada trial:
-   **Reposo → Prepárate → CIERRA Y ABRE LA MANO (verde) → Reposo**, con un pitido en cada cambio.
-5. Repite hasta tener las grabaciones de la sesión (por defecto 4). Para la siguiente colocación de electrodos:
-   **+ Nueva sesión (electrodos nuevos)**.
-6. Al final, en el proyecto: **Descargar dataset**. El ZIP ya trae la estructura del repositorio del curso:
+## The six parts
 
-```
-data/raw/P01_S01_R01.csv        señal completa: time_ms, raw_mV, emg_mV, label, trial
-data/metadata.csv               una fila por grabación (sesión, fecha, tiempos, electrodos, set train/test, rechazos)
-QUALITY-REPORT.md               regla de calidad, trials rechazados por grabación y ruido (RMS reposo vs movimiento)
-edge_impulse/training/          ventanas de los trials que pasan la regla, de las sesiones de entrenamiento
-edge_impulse/testing/           lo mismo, de las sesiones de prueba
-```
+### 1. Data acquisition
+[TODO 24] recordings, [TODO 120] trials, 6 sessions, 1 person. One channel of surface EMG on the finger flexors and the flexor carpi radialis of the right forearm, with the PERLA circuit (AD620 instrumentation amplifier, 8th-order band-pass 10 to 300 Hz, 8th-order notch at 60 Hz, offset to 1.65 V) and an ESP32 that samples at **1000 Hz** with a hardware timer. The ESP32 sends two channels over Bluetooth to our web app [Captura ML](https://vicbelar.github.io/Machine-Learning-APP/) (its code is in this repository, see `APP.md`):
 
-- `label` en `data/raw`: `reposo`, `aviso`, `mover`, `entre` (reposo después del movimiento). Las clases del modelo
-  son `mover` y `reposo`; `aviso` y `entre` no se usan para entrenar.
-- Las muestras perdidas por Bluetooth quedan como **celdas vacías** (hueco), nunca como cero.
-- **Regla de calidad** (fija antes de ver resultados): se rechaza un trial si una muestra cruda toca el límite del ADC
-  (≤ 20 mV o ≥ 3050 mV) o si le falta más del 1 % de sus muestras.
-- La sesión es de **prueba** si está en *Sesiones de prueba* (por defecto S05 y S06). Nunca se mezclan sesiones
-  entre entrenamiento y prueba.
+- `raw_mV`: the input of the converter, in millivolts, with no digital filter. It is the analog output of the circuit, so it is already filtered by the analog stage.
+- `emg_mV`: the same signal after the digital filters of PERLA (see `PROTOCOL.md`).
 
-### Subir a Edge Impulse (proyectos con protocolo)
+The app stores every sample in the browser and exports the files. Nothing is saved on the ESP32.
 
-1. Descomprime el ZIP.
-2. **Data acquisition → Upload data**: sube `edge_impulse/training/` con *Upload into category: **Training***
-   y luego `edge_impulse/testing/` con *Upload into category: **Testing***.
-3. *Label*: **Infer from filename** (`mover.P01_S01_R01_T1.csv` → `mover`).
-4. **No** marques *Automatically split between training and testing*: mezclaría sesiones (leakage).
+**Evidence:** `data/raw/` ([TODO 24] files), `data/metadata.csv` ([TODO 24] rows), `cue/`, the app (`index.html`, `app.js`, `style.css`) and the firmware (`firmware/EMG_Captura_BLE/`).
 
-## Cómo se usa (acelerómetro y proyectos EMG anteriores)
+### 2. Task
+The person closes and opens the right hand, the same movement a child does to move the turtle in PERLA. Two classes: **movement** (`mover`) and **rest** (`reposo`). The person sits, with the forearm on the table and the palm up. [TODO: confirm "close and open repeatedly" or "close and hold"]
 
-1. Abre la app en **Chrome** (Android o computadora). En iPhone no funciona porque Safari no tiene Web Bluetooth.
-2. **Nuevo proyecto** → nombre (p. ej. *EMG Ballena*) → 1) tipo (EMG o Acelerómetro) → 2) dispositivo a vincular → 3) movimientos que entran al machine learning.
-3. **Conectar** → elige `Ballena-EMG-ML` o `TactSuit-IMU` (o el que hayas agregado). Si no tienes el ESP a la mano, usa **Simulador** para probar (datos falsos).
-4. Entra a la **carpeta** del movimiento → elige duración (máx. 60 s) y ritmo → **Grabar**.
-   Hay una cuenta regresiva de 3 s y luego el metrónomo marca cada movimiento (p. ej. *Flexión* / *Extensión*).
-5. Al terminar, la grabación aparece con **fecha y hora de Monterrey**. Vuelve a grabar; máximo **30 por movimiento**.
-6. En el proyecto: **Descargar todo (ZIP para Edge Impulse)**.
+**Evidence:** `PROTOCOL.md`, `figures/placement_S01.jpg`.
 
-## Subir a Edge Impulse
+### 3. Trial and cue timing
+| Window | Seconds | What the person sees in the app |
+|---|---|---|
+| Rest before | 0 to 4 | Reposo |
+| Warning cue | 4 to 5 | Prepárate (yellow, beep) |
+| Action window | 5 to 8 | CIERRA Y ABRE LA MANO (green, beep) |
+| Rest between trials | 8 to 11 | Reposo (beep) |
 
-1. Descomprime el ZIP.
-2. Edge Impulse → **Data acquisition** → **Upload data** → selecciona los `.csv`.
-3. En *Label* elige **Infer from filename**. La etiqueta es lo que va antes del primer punto:
-   `extension_y_flexion.emg_ballena_03_20261117-115230.csv` → etiqueta `extension_y_flexion`.
-   (Sin acentos ni espacios; el `LEEME.txt` del ZIP trae la lista de etiquetas.)
-4. Deja marcado *Automatically split between training and testing* (80 % entrenamiento / 20 % prueba).
-5. Si Edge Impulse abre el **CSV Wizard** la primera vez: la columna de tiempo es `timestamp` (milisegundos) y las demás son los valores.
+One recording holds 5 trials, so it lasts 55 s. The app shows the cue from the count of received samples, so the label in the file and the cue on the screen use the same clock.
 
-Formato de cada CSV:
+**Evidence:** `cue/cue-video.mp4`, the columns `rest_s`, `warning_s`, `move_s`, `between_s` of `data/metadata.csv`, the columns `label` and `trial` of each file in `data/raw/`, `figures/one_recording_marked.png`.
 
-```
-timestamp,emg_mV
-0,0.4
-1,3.6
-...
-```
+### 4. Sessions
+1 person. 6 sessions on 3 different days ([TODO dates]). Every session starts with new electrodes, placed again from zero. Each session has [TODO 4] recordings, with one minute of pause between recordings.
 
-## Firmware
+**Evidence:** the columns `participant`, `session` and `date` of `data/metadata.csv`, one photo per session in `figures/`.
 
-| Carpeta | Para qué |
+### 5. Cleaning
+Filters: the analog band-pass and notch of the PERLA circuit, then a digital notch at 60 Hz (the power line in Mexico), a high-pass at 20 Hz and a low-pass at 300 Hz in the ESP32. The type, order and limits of each filter, with their source, are in `PROTOCOL.md`. The upper limit, 300 Hz, is below half of our sampling rate (500 Hz).
+
+Rule to reject a trial, written before we looked at any score: reject it if one sample of `raw_mV` sits at the limit of the converter (≤ 20 mV or ≥ 3050 mV), or if more than 1 % of its samples are missing. Samples lost over Bluetooth stay as empty cells, never as zeros.
+
+Result: [TODO] of [TODO 120] trials rejected. [TODO] remain. The raw files are untouched.
+
+**Evidence:** `QUALITY-REPORT.md`, `code/check_quality.py`, the columns `trials_rejected` and `notes` of `data/metadata.csv`.
+
+### 6. Fair split
+Training: sessions S01 to S04, [TODO] trials. Test: sessions S05 and S06, [TODO] trials, recorded on another day with new electrodes. The model never sees these two sessions in training. We do not use the automatic 80/20 split of Edge Impulse: we upload `edge_impulse/training/` and `edge_impulse/testing/` into each category by hand. We do not cut windows of one recording into both sets.
+
+Limit: the model is built and tested on one adult and one movement. We do not claim that it works for other people, and not for the children of PERLA.
+
+**Evidence:** the column `set` of `data/metadata.csv`, the folders `edge_impulse/training/` and `edge_impulse/testing/`.
+
+## What comes next
+Our decisions about features, the model and the route are in `DECISIONS.md`. The rationale of each member is in `rationale/`, and a screenshot of each member's AI tool is in `ai-tools/`.
+
+## How to repeat our recording
+Read `PROTOCOL.md`. Load `firmware/EMG_Captura_BLE` on the ESP32, open the app [Captura ML](https://vicbelar.github.io/Machine-Learning-APP/) in Chrome (how to use it: `APP.md`), and use the same protocol values. It is enough to record the same way without asking us.
+
+## Files
+
+| Path | What it holds |
 |---|---|
-| `firmware/EMG_Captura_BLE/` | ESP32 de la EMG (pin D34). Manda por BLE la señal **cruda** del ADC (`raw_mV`, para `data/raw` y para detectar saturación) y la **filtrada** (`emg_mV`), con la misma cadena que `EMG_Emisor` de BallenaMonitor (notch 60 Hz, pasa-altas 20 Hz, pasa-bajas 300 Hz, rechazo de artefactos). Se carga **solo para grabar datos**; para jugar con la ballena vuelve a cargar `EMG_Emisor`. |
-| `firmware/TactSuit_IMU_BLE/` | **Plantilla.** Con `SIMULAR = true` manda datos de prueba. Cuando elijan el sensor, se llena `leerIMU()`. |
+| `data/raw/P01_Sxx_Ryy.csv` | one recording: `time_ms`, `raw_mV`, `emg_mV`, `label` (reposo, aviso, mover, entre), `trial` |
+| `data/metadata.csv` | one row per recording, see `DATA-DICTIONARY.md` |
+| `edge_impulse/` | the windows of the kept trials, split by session, ready for Edge Impulse |
+| `QUALITY-REPORT.md` | rejected trials and the reason, noise at rest and in movement |
+| `code/check_quality.py` | checks the rule again from `data/raw/`, without the app |
+| `index.html`, `app.js`, `style.css`, `APP.md` | the recording app Captura ML and how to use it |
+| `firmware/` | the ESP32 code that reads the EMG and sends it to the app |
+| `cue/`, `figures/` | cue video, electrode photos (no faces), figures |
 
-Placa: *ESP32 Dev Module*, core ESP32 3.x en Arduino IDE.
+## Versions
+Two versions are marked on GitHub: **v0-first** and **v1-report**. See `CHANGELOG.md`.
 
-### Protocolo Bluetooth (Nordic UART)
-
-| | UUID |
-|---|---|
-| Servicio | `6E400001-B5A3-F393-E0A9-E50E24DCCA9E` |
-| RX (app → ESP, write) | `6E400002-B5A3-F393-E0A9-E50E24DCCA9E` |
-| TX (ESP → app, notify) | `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` |
-
-Todo es texto, una línea por mensaje (`\n`):
-
-- La app manda `START`, `STOP` o `INFO`.
-- El ESP responde `#INFO,<nombre>,<fs_hz>,<canal1;canal2;...>,<escala>`, por ejemplo `#INFO,Ballena-EMG-ML,1000,emg_mV,10`.
-- Los datos van así: `D,<seq>,<v1>,<v2>,...`. Son enteros y el valor real es `v / escala`. Si hay varios canales, van intercalados: `ax,ay,az,ax,ay,az,…`.
-- `seq` aumenta 1 en cada línea (0–65535). Si la app detecta que faltan líneas, rellena repitiendo el último valor para no romper la escala de tiempo, y lo marca como “muestras perdidas” en la grabación.
-
-Para agregar otro sensor, basta con mandar otro `#INFO` (otros canales o frecuencia). La app se adapta sola.
-
-## Publicar en GitHub Pages
-
-Repo → **Settings** → **Pages** → *Deploy from a branch* → `main` / `(root)`.
-La app queda en `https://<usuario>.github.io/Machine-Learning-APP/`. Web Bluetooth necesita HTTPS, y GitHub Pages ya lo da.
-
-## Probar en la computadora
-
-Abre el link de GitHub Pages en Chrome; con Bluetooth en la laptop también se conecta al ESP.
-Para probar sin internet: `python3 -m http.server` dentro de la carpeta y abre `http://localhost:8000`.
-
-## Archivos
-
-- `index.html`, `style.css`, `app.js`: la app completa, sin dependencias.
-- `firmware/`: sketches de Arduino para los ESP32.
+## Where we searched
+- Merletti R. *Standards for Reporting EMG Data*. ISEK, 1999. And Merletti R, Cerone GL. Tutorial: surface EMG detection, conditioning and pre-processing: best practices. *J Electromyogr Kinesiol* 54:102440, 2020. https://doi.org/10.1016/j.jelekin.2020.102440
+- Hermens HJ and others. Development of recommendations for SEMG sensors and sensor placement procedures. *J Electromyogr Kinesiol* 10(5):361–374, 2000. https://doi.org/10.1016/S1050-6411(00)00027-4
+- Riascos Salas J, Molinas M, Lotte F. Machine learning methods for BCI: challenges, pitfalls and promises. ESANN 2024. https://www.esann.org/sites/default/files/proceedings/2024/ES2024-4.pdf
+- Wilson G and others. Good enough practices in scientific computing. *PLOS Comput Biol* 13(6):e1005510, 2017. https://doi.org/10.1371/journal.pcbi.1005510
