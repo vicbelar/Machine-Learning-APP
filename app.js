@@ -9,6 +9,13 @@
  *   ESP -> app (TX, notify):  "#INFO,<nombre>,<fs_hz>,<canal1;canal2;...>,<escala>\n"
  *                             "D,<seq>,<v1>,<v2>,...\n"   (enteros; valor real = v / escala;
  *                              con varios canales van intercalados: ax,ay,az,ax,ay,az,...)
+ *
+ * Proyectos EMG nuevos (PERLA) usan el PROTOCOLO del curso (Report 1):
+ *   - cada grabación = N trials: reposo -> aviso -> movimiento -> reposo, con un temporizador en pantalla
+ *   - sesiones S01, S02, ... (una sesión = electrodos nuevos); las sesiones de prueba se eligen en el protocolo
+ *   - el ZIP sale con la estructura del repositorio: data/raw/, data/metadata.csv, QUALITY-REPORT.md
+ *     y edge_impulse/training|testing (separado por sesión, nunca al azar)
+ * Proyectos de acelerómetro y proyectos EMG viejos siguen con las carpetas + metrónomo.
  */
 
 // ---------------------------------------------------------------------------
@@ -23,6 +30,51 @@ const TZ = 'America/Monterrey';
 const MAX_RECS = 30;          // grabaciones máximas por movimiento
 const COUNTDOWN_S = 3;        // cuenta regresiva antes de grabar
 const MIN_SAVE_S = 1;         // si se detiene antes de esto, no se guarda
+
+// ---- Protocolo EMG (PERLA) ----
+// Regla de calidad (fijada ANTES de ver cualquier resultado del modelo):
+//   se rechaza un trial si una muestra cruda toca el límite del ADC, o si falta más del 1 % de sus muestras.
+const SAT_LOW_MV = 20;        // mismos límites que EMG_Emisor (ADC del ESP32: 0 a ~3.1 V)
+const SAT_HIGH_MV = 3050;
+const MAX_MISSING = 0.01;
+const PHASE_LABELS = ['reposo', 'aviso', 'mover', 'entre'];   // columna "label" de data/raw
+const EMG_PROTOCOL_DEFAULT = {
+  participant: 'P01',
+  movement: 'Cerrar y abrir la mano',
+  cue_text: 'CIERRA Y ABRE LA MANO',
+  muscle: 'Flexores de los dedos y flexor radial del carpo',
+  side: 'derecho',
+  rest_s: 4, warning_s: 1, move_s: 3, between_s: 3,
+  trials: 5,
+  recs_per_session: 4,
+  test_sessions: 'S05,S06',
+  electrode_type: 'Ag/AgCl desechables con gel, 55 mm',
+  electrode_distance_cm: '',
+  skin_preparation: 'Alcohol isopropílico',
+  sensor_model: 'AD620 + filtros activos (circuito PERLA)',
+  gain: '',
+  adc_bits: 12,
+};
+const PROTOCOL_FIELDS = [
+  { k: 'participant', label: 'Código de la persona', ph: 'P01' },
+  { k: 'movement', label: 'Movimiento', ph: 'Cerrar y abrir la mano' },
+  { k: 'cue_text', label: 'Texto en pantalla durante el movimiento', ph: 'CIERRA Y ABRE LA MANO' },
+  { k: 'muscle', label: 'Músculo', ph: 'Flexores de los dedos' },
+  { k: 'side', label: 'Lado', ph: 'derecho' },
+  { k: 'rest_s', label: 'Reposo (s)', num: true },
+  { k: 'warning_s', label: 'Aviso (s)', num: true },
+  { k: 'move_s', label: 'Movimiento (s)', num: true },
+  { k: 'between_s', label: 'Reposo entre trials (s)', num: true },
+  { k: 'trials', label: 'Trials por grabación', num: true, int: true },
+  { k: 'recs_per_session', label: 'Grabaciones por sesión', num: true, int: true },
+  { k: 'test_sessions', label: 'Sesiones de prueba', ph: 'S05,S06' },
+  { k: 'electrode_type', label: 'Tipo de electrodo', ph: 'Ag/AgCl con gel' },
+  { k: 'electrode_distance_cm', label: 'Distancia entre electrodos (cm)', ph: 'medirla', num: true, optional: true },
+  { k: 'skin_preparation', label: 'Preparación de la piel', ph: 'alcohol' },
+  { k: 'sensor_model', label: 'Sensor / circuito', ph: 'AD620 ...' },
+  { k: 'gain', label: 'Ganancia total', ph: 'p. ej. 10 (AD620)' },
+  { k: 'adc_bits', label: 'Bits del ADC', num: true, int: true },
+];
 
 // Tipos de dispositivo y movimientos sugeridos (las "carpetas" que se pueden agregar)
 const DEVICE_TYPES = {
@@ -64,7 +116,7 @@ const DEVICE_TYPES = {
 // Dispositivos que ya vienen en la app. Se pueden agregar más desde la app ("vincular desde código").
 const BUILTIN_DEVICES = [
   { id: 'ballena', type: 'emg', name: 'Ballena Monitor', namePrefix: 'Ballena-EMG',
-    fs: 1000, channels: ['emg_mV'], scale: 10, builtin: true },
+    fs: 1000, channels: ['raw_mV', 'emg_mV'], scale: 10, builtin: true },
   { id: 'tactsuit', type: 'acc', name: 'TactSuit', namePrefix: 'TactSuit',
     fs: 100, channels: ['ax_g', 'ay_g', 'az_g'], scale: 1000, builtin: true },
 ];
@@ -109,6 +161,49 @@ function download(blob, name) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+// ---- Protocolo ----
+const trialLen = (p) => p.rest_s + p.warning_s + p.move_s + p.between_s;
+function phaseAt(t, p) {
+  const T = trialLen(p);
+  const trial = Math.floor(t / T);
+  const u = t - trial * T;
+  let ph = 3;
+  if (u < p.rest_s) ph = 0;
+  else if (u < p.rest_s + p.warning_s) ph = 1;
+  else if (u < p.rest_s + p.warning_s + p.move_s) ph = 2;
+  return { trial, ph };
+}
+const isProto = (p) => !!(p && p.type === 'emg' && p.protocol);
+const sessId = (n) => 'S' + pad(n);
+const sessNum = (sid) => Number(String(sid).replace(/\D/g, '')) || 0;
+function sessionSet(p, sid) {
+  const test = String(p.protocol.test_sessions || '').toUpperCase().split(/[\s,;]+/).filter(Boolean)
+    .map((x) => sessId(sessNum(x)));
+  return test.includes(sid) ? 'test' : 'train';
+}
+const recBase = (r) => `${r.participant}_${r.session}_R${pad(r.n)}`;
+const isoDate = (ts) => { const p = mtyParts(ts); return `${p.year}-${p.month}-${p.day}`; };
+// Para graficar: si hay señal cruda y filtrada, se muestra solo la filtrada (la cruda tiene ~1650 mV de offset)
+function viewChannel(data, channels) {
+  const i = channels.indexOf('emg_mV');
+  if (i < 0 || channels.length === 1) return { data, nCh: channels.length, names: channels };
+  const nCh = channels.length;
+  const n = Math.floor(data.length / nCh);
+  const out = new Float32Array(n);
+  for (let k = 0; k < n; k++) out[k] = data[k * nCh + i];
+  return { data: out, nCh: 1, names: ['emg_mV'] };
+}
+// Ventanas de "mover" de una grabación, como fracción del total (para sombrearlas en la gráfica)
+function moveBands(rec) {
+  if (rec.kind !== 'protocol') return null;
+  const p = rec.protocol, T = trialLen(p), total = rec.frames / rec.fs, out = [];
+  for (let k = 0; k < rec.trials; k++) {
+    const a = k * T + p.rest_s + p.warning_s;
+    out.push([a / total, (a + p.move_s) / total]);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,12 +299,12 @@ const stream = {
     const frames = Math.floor(nVals / nCh);
     if (!frames || !Number.isFinite(seq)) return;
 
-    // Paquetes perdidos: se rellenan repitiendo el último valor para no romper la escala de tiempo
+    // Paquetes perdidos: se guardan como huecos (NaN = celda vacía en el CSV), no como ceros ni
+    // repitiendo el último valor. Así la escala de tiempo sigue correcta y el hueco queda visible.
     if (this.lastSeq !== null) {
       const missed = (seq - ((this.lastSeq + 1) & 0xffff) + 0x10000) & 0xffff;
-      if (missed > 0 && missed < 500 && this.lastFrame) {
-        const fill = new Float32Array(missed * frames * nCh);
-        for (let f = 0; f < missed * frames; f++) fill.set(this.lastFrame, f * nCh);
+      if (missed > 0 && missed < 500) {
+        const fill = new Float32Array(missed * frames * nCh).fill(NaN);
         this.lost += missed * frames;
         this.push(fill, missed * frames, true);
       }
@@ -304,11 +399,19 @@ const stream = {
       for (let i = 0; i < batch; i++) {
         const t = this.simT; this.simT += 1 / type.fs;
         if (isEmg) {
-          const period = 60 / (recorder.bpm || 30);
-          const ph = (t % period) / period;
-          const rest = recorder.active && recorder.movement?.id === 'descanso';
-          const env = 6 + (rest ? 0 : 140 * Math.max(0, Math.sin(Math.PI * ph)) ** 3);
+          let env;
+          if (recorder.active && recorder.protocol) {
+            // protocolo: actividad solo en la ventana de movimiento
+            const { ph } = phaseAt((recorder.pos + i) / type.fs, recorder.protocol);
+            env = 6 + (ph === 2 ? 120 : 0);
+          } else {
+            const period = 60 / (recorder.bpm || 30);
+            const ph = (t % period) / period;
+            const rest = recorder.active && recorder.movement?.id === 'descanso';
+            env = 6 + (rest ? 0 : 140 * Math.max(0, Math.sin(Math.PI * ph)) ** 3);
+          }
           const v = env * (Math.random() * 2 - 1) * (0.6 + 0.4 * Math.sin(2 * Math.PI * 80 * t));
+          if (this.channels.length === 2) vals.push(Math.round((1650 + v) * type.scale));  // raw_mV
           vals.push(Math.round(v * type.scale));
         } else {
           const ax = 0.08 * Math.sin(2 * Math.PI * 0.25 * t) + 0.01 * (Math.random() - 0.5);
@@ -349,6 +452,7 @@ const recorder = {
   target: 0, pos: 0, data: null, lost: 0,
   startedAt: 0, beatTimer: null, countTimer: null, beatIndex: 0, wakeLock: null,
   audio: null,
+  protocol: null, lastPh: -1, lastTrial: -1,   // solo en proyectos con protocolo
 
   beep(freq = 880, dur = 0.07) {
     if (!$('chkSound').checked) return;
@@ -367,8 +471,19 @@ const recorder = {
   async begin(movement) {
     if (!stream.mode) { toast('Primero conecta el dispositivo (o usa el simulador)'); return; }
     this.movement = movement;
-    this.bpm = Number($('selBpm').value);
-    const seconds = Number($('selDuration').value);
+    let seconds;
+    if (isProto(state.project)) {
+      this.protocol = { ...state.project.protocol };
+      this.bpm = 0;
+      seconds = this.protocol.trials * trialLen(this.protocol);
+      if (!stream.channels.includes('raw_mV')) {
+        toast('Aviso: el ESP no manda la señal cruda (raw_mV). Carga el firmware nuevo para poder revisar la saturación.', 5000);
+      }
+    } else {
+      this.protocol = null;
+      this.bpm = Number($('selBpm').value);
+      seconds = Number($('selDuration').value);
+    }
     this.counting = true;
     try { this.wakeLock = await navigator.wakeLock?.request('screen'); } catch (_) { this.wakeLock = null; }
     setRecordingUI(true);
@@ -396,10 +511,31 @@ const recorder = {
     this.active = true;
     this.beatIndex = 0;
     $('metronome').className = 'metronome recording';
+    if (this.protocol) {
+      this.lastPh = -1; this.lastTrial = -1;
+      this.updatePhase();
+      return;
+    }
     this.beep(1200, 0.12);
     this.tick();
     if (this.bpm > 0) this.beatTimer = setInterval(() => this.tick(), 60000 / this.bpm);
     else $('phase').textContent = 'Grabando';
+  },
+
+  // Protocolo: la fase sale del número de muestras recibidas, así la etiqueta del CSV
+  // y lo que vio la persona en pantalla usan el mismo reloj.
+  updatePhase() {
+    if (!this.active || !this.protocol) return;
+    const p = this.protocol;
+    const total = p.trials * trialLen(p);
+    const { trial, ph } = phaseAt(Math.min(this.pos / this.fs, total - 1e-6), p);
+    if (ph === this.lastPh && trial === this.lastTrial) return;
+    this.lastPh = ph; this.lastTrial = trial;
+    $('phase').textContent = ['Reposo', 'Prepárate', p.cue_text || 'Movimiento', 'Reposo'][ph];
+    $('metronome').className = 'metronome recording' + (ph === 1 ? ' warn' : ph === 2 ? ' move' : '');
+    if (ph === 1) this.beep(660);
+    else if (ph === 2) this.beep(990, 0.15);
+    else if (ph === 3) this.beep(520);
   },
 
   tick() {
@@ -434,6 +570,7 @@ const recorder = {
     setRecordingUI(false);
     if (!wasActive || !save) return;
     const nCh = this.channels.length;
+    if (this.protocol) { await this.saveProtocol(); return; }
     if (this.pos < MIN_SAVE_S * this.fs) { toast('Grabación muy corta, no se guardó'); return; }
     const existing = (await DB.recordings(state.project.id)).filter((r) => r.label === this.movement.id);
     if (existing.length >= MAX_RECS) { toast(`Ya hay ${MAX_RECS} grabaciones de este movimiento`); return; }
@@ -459,6 +596,36 @@ const recorder = {
     await renderFolder();
   },
 
+  // Guarda una grabación del protocolo: solo trials completos
+  async saveProtocol() {
+    const p = this.protocol;
+    const nCh = this.channels.length;
+    const T = trialLen(p);
+    const trials = Math.floor(this.pos / this.fs / T + 1e-9);
+    if (trials < 1) { toast('No se completó ni un trial: no se guardó'); return; }
+    const frames = Math.min(this.pos, Math.round(trials * T * this.fs));
+    const sid = state.movement.id;
+    const existing = (await DB.recordings(state.project.id)).filter((r) => r.session === sid);
+    const n = existing.reduce((m, r) => Math.max(m, r.n), 0) + 1;
+    const data = this.data.slice(0, frames * nCh);
+    let lost = 0;
+    for (let i = 0; i < frames; i++) if (Number.isNaN(data[i * nCh])) lost++;
+    const rec = {
+      id: uid(), projectId: state.project.id, kind: 'protocol',
+      session: sid, participant: p.participant, n,
+      createdAt: this.startedAt, fs: this.fs, channels: this.channels, scale: this.scale,
+      frames, lost, trials, protocol: p,
+      source: stream.mode === 'sim' ? 'simulador' : stream.devName,
+      data,
+    };
+    await DB.put('recordings', rec);
+    this.beep(520, 0.25);
+    const q = trialQuality(rec);
+    const rej = q.filter((x) => x.rejected).length;
+    toast(`${recBase(rec)} guardada: ${trials} trials` + (rej ? ` · ${rej} no pasan la regla de calidad` : ''), 3500);
+    await renderFolder();
+  },
+
   cancel(msg) {
     this.stop(false);
     if (msg) toast(msg);
@@ -469,6 +636,7 @@ const recorder = {
 // Exportar (CSV y ZIP para Edge Impulse)
 // ---------------------------------------------------------------------------
 function recToCsv(rec) {
+  if (rec.kind === 'protocol') return protoRecToCsv(rec);
   const nCh = rec.channels.length;
   const dec = Math.max(0, Math.round(Math.log10(rec.scale || 1)));
   const lines = ['timestamp,' + rec.channels.join(',')];
@@ -485,9 +653,172 @@ function recToCsv(rec) {
 const moveLabel = (m) => slug(m.name);
 const movePhases = (m) => (m.phases && m.phases.length ? m.phases : [m.name]);
 function recFileName(rec) {
+  if (rec.kind === 'protocol') return `${recBase(rec)}.csv`;
   const m = state.project.movements.find((x) => x.id === rec.label);
   const label = m ? moveLabel(m) : rec.label;
   return `${label}.${slug(state.project.name)}_${pad(rec.n)}_${fileStamp(rec.createdAt)}.csv`;
+}
+
+// ---- Exportar: protocolo (estructura del repositorio del curso) ----
+const csvCell = (v) => { const t = String(v ?? ''); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+const fmtVal = (v, dec) => (Number.isNaN(v) ? '' : v.toFixed(dec));
+
+// data/raw: time_ms, canales (raw_mV, emg_mV), label (reposo/aviso/mover/entre), trial (1..N).
+// Las muestras perdidas por Bluetooth quedan como celdas vacías (hueco, no cero).
+function protoRecToCsv(rec) {
+  const nCh = rec.channels.length;
+  const dec = Math.max(0, Math.round(Math.log10(rec.scale || 1)));
+  const lines = ['time_ms,' + rec.channels.join(',') + ',label,trial'];
+  for (let i = 0; i < rec.frames; i++) {
+    const { trial, ph } = phaseAt(i / rec.fs, rec.protocol);
+    let row = String(Math.round((i * 1000) / rec.fs));
+    for (let c = 0; c < nCh; c++) row += ',' + fmtVal(rec.data[i * nCh + c], dec);
+    lines.push(row + ',' + PHASE_LABELS[ph] + ',' + (trial + 1));
+  }
+  return lines.join('\n') + '\n';
+}
+
+// Regla de calidad por trial
+function trialQuality(rec) {
+  const p = rec.protocol, nCh = rec.channels.length;
+  const per = Math.round(trialLen(p) * rec.fs);
+  const ri = rec.channels.indexOf('raw_mV');
+  const out = [];
+  for (let k = 0; k < rec.trials; k++) {
+    let miss = 0, sat = 0;
+    const end = Math.min(rec.frames, (k + 1) * per);
+    for (let i = k * per; i < end; i++) {
+      if (Number.isNaN(rec.data[i * nCh])) { miss++; continue; }
+      if (ri >= 0) {
+        const v = rec.data[i * nCh + ri];
+        if (v <= SAT_LOW_MV || v >= SAT_HIGH_MV) sat++;
+      }
+    }
+    const missFrac = miss / per;
+    const reasons = [];
+    if (sat > 0) reasons.push('samples at the limit of the converter');
+    if (missFrac > MAX_MISSING) reasons.push(`${(missFrac * 100).toFixed(1)} % of the samples missing`);
+    out.push({ k: k + 1, miss, missFrac, sat, rejected: reasons.length > 0, reasons, checkedSat: ri >= 0 });
+  }
+  return out;
+}
+
+// Segmento de un canal (con huecos interpolados: solo para Edge Impulse, data/raw queda intacto)
+function segment(rec, ch, start, len) {
+  const nCh = rec.channels.length;
+  const v = new Float32Array(len);
+  for (let i = 0; i < len; i++) v[i] = rec.data[(start + i) * nCh + ch];
+  let last = -1;
+  for (let i = 0; i <= len; i++) {
+    if (i < len && Number.isNaN(v[i])) continue;
+    if (i - last > 1) {
+      const a = last >= 0 ? v[last] : (i < len ? v[i] : 0);
+      const b = i < len ? v[i] : a;
+      for (let j = last + 1; j < i; j++) v[j] = a + ((b - a) * (j - last)) / (i - last);
+    }
+    last = i;
+  }
+  return v;
+}
+function rms(v) {
+  let s = 0, n = 0;
+  for (const x of v) if (!Number.isNaN(x)) { s += x * x; n++; }
+  return n ? Math.sqrt(s / n) : NaN;
+}
+
+function buildDataset(project, recs) {
+  const p0 = project.protocol;
+  const files = [];
+  const meta = [];
+  const qRows = [];
+  const noise = {};   // sesión -> {rest:[], move:[]}
+  let tot = 0, rejSat = 0, rejGap = 0, keptTrain = 0, keptTest = 0, noSat = false;
+  const cols = ['file_name', 'participant', 'session', 'date', 'recording', 'trials', 'rest_s', 'warning_s', 'move_s',
+    'between_s', 'fs_hz', 'movement', 'muscle', 'side', 'electrode_type', 'electrode_distance_cm', 'skin_preparation',
+    'sensor_model', 'gain', 'adc_bits', 'channels', 'cue', 'set', 'samples', 'missing_samples', 'trials_rejected', 'notes'];
+  recs.sort((a, b) => sessNum(a.session) - sessNum(b.session) || a.n - b.n);
+  for (const r of recs) {
+    const p = r.protocol;
+    const set = sessionSet(project, r.session);
+    const q = trialQuality(r);
+    const base = recBase(r);
+    files.push({ name: `data/raw/${base}.csv`, data: protoRecToCsv(r) });
+    const rejected = q.filter((x) => x.rejected);
+    const notes = rejected.length ? rejected.map((x) => `trial ${x.k}: ${x.reasons.join(' and ')}`).join('; ') : 'kept';
+    if (!q[0]?.checkedSat) noSat = true;
+    meta.push([`${base}.csv`, r.participant, r.session, isoDate(r.createdAt), r.n, r.trials, p.rest_s, p.warning_s,
+      p.move_s, p.between_s, r.fs, p.movement, p.muscle, p.side, p.electrode_type, p.electrode_distance_cm,
+      p.skin_preparation, p.sensor_model, p.gain, p.adc_bits, r.channels.join(';'),
+      'Captura ML app, on-screen trial timer', set, r.frames, r.lost, rejected.length, notes]);
+    qRows.push(`| ${base}.csv | ${r.session} | ${set} | ${r.trials} | ${rejected.length} | ${rejected.length ? rejected.map((x) => `trial ${x.k}: ${x.reasons.join(' and ')}`).join('; ') : 'kept'} |`);
+    // Edge Impulse: por cada trial que pasa la regla, una ventana de reposo y una de movimiento
+    const ch = Math.max(0, r.channels.indexOf('emg_mV'));
+    const per = Math.round(trialLen(p) * r.fs);
+    const folder = set === 'test' ? 'testing' : 'training';
+    noise[r.session] = noise[r.session] || { rest: [], move: [] };
+    for (const t of q) {
+      tot++;
+      if (t.rejected) { if (t.sat > 0) rejSat++; else rejGap++; continue; }
+      if (set === 'test') keptTest++; else keptTrain++;
+      const s0 = (t.k - 1) * per;
+      const wins = [
+        ['reposo', s0, Math.round(p.rest_s * r.fs)],
+        ['mover', s0 + Math.round((p.rest_s + p.warning_s) * r.fs), Math.round(p.move_s * r.fs)],
+      ];
+      for (const [label, start, len] of wins) {
+        const v = segment(r, ch, start, len);
+        (label === 'mover' ? noise[r.session].move : noise[r.session].rest).push(rms(v));
+        const lines = ['timestamp,emg_mV'];
+        for (let i = 0; i < len; i++) lines.push(Math.round((i * 1000) / r.fs) + ',' + v[i].toFixed(1));
+        files.push({ name: `edge_impulse/${folder}/${label}.${base}_T${t.k}.csv`, data: lines.join('\n') + '\n' });
+      }
+    }
+  }
+  files.push({ name: 'data/metadata.csv', data: [cols.join(','), ...meta.map((row) => row.map(csvCell).join(','))].join('\n') + '\n' });
+
+  const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN);
+  const noiseRows = Object.keys(noise).sort((a, b) => sessNum(a) - sessNum(b)).map((sid) => {
+    const r = mean(noise[sid].rest), m = mean(noise[sid].move);
+    return `| ${sid} | ${r.toFixed(1)} | ${m.toFixed(1)} | ${(m / r).toFixed(1)} |`;
+  });
+  const kept = keptTrain + keptTest;
+  const report = `# Quality report
+
+Rule, written before any model score: reject a trial if one raw sample sits at the limit of the converter (raw_mV ≤ ${SAT_LOW_MV} mV or ≥ ${SAT_HIGH_MV} mV; the ESP32 ADC reads about 0 to 3.1 V), or if more than ${MAX_MISSING * 100} % of its samples are missing (packets lost over Bluetooth). Missing samples stay as empty cells in \`data/raw/\`; they are never replaced by zeros.
+${noSat ? '\n> Some recordings have no raw_mV channel (old firmware), so saturation could not be checked in them.\n' : ''}
+Generated by the Captura ML app on ${fmtDate(Date.now())} (Monterrey time).
+
+| File | Session | Set | Trials | Rejected | Reason |
+|---|---|---|---|---|---|
+${qRows.join('\n')}
+
+**Totals.** ${tot} trials recorded. ${rejSat + rejGap} rejected: ${rejSat} for samples at the limit of the converter (an artifact), ${rejGap} for missing samples (a gap). ${kept} kept: ${keptTrain} for training, ${keptTest} for the test.
+
+**Noise.** RMS of the filtered signal (emg_mV) in the rest window and in the movement window of the kept trials, mean per session:
+
+| Session | Rest RMS (mV) | Movement RMS (mV) | Movement / rest |
+|---|---|---|---|
+${noiseRows.join('\n')}
+
+**Outliers.** Write here any recording that is far from the others of its class, and whether it is an error or a real rare case.
+`;
+  files.push({ name: 'QUALITY-REPORT.md', data: report });
+  files.push({ name: 'edge_impulse/LEEME.txt', data: `Proyecto: ${project.name}
+Exportado: ${fmtDate(Date.now())} (hora MTY)
+
+Cada archivo es UNA ventana de un trial que pasó la regla de calidad:
+  reposo.<persona>_<sesión>_R<grabación>_T<trial>.csv   -> ${p0.rest_s} s de reposo
+  mover.<persona>_<sesión>_R<grabación>_T<trial>.csv    -> ${p0.move_s} s de movimiento
+La señal es emg_mV (filtrada en el ESP32, la misma que usa la ballena).
+
+Edge Impulse > Data acquisition > Upload data:
+1. Sube la carpeta "training" con "Upload into category: Training".
+2. Sube la carpeta "testing" con "Upload into category: Testing".
+3. Label: "Infer from filename" (la etiqueta es lo que va antes del primer punto).
+NO uses "Automatically split between training and testing": mezclaría sesiones
+(leakage). Las sesiones de prueba (${p0.test_sessions}) nunca deben entrar al entrenamiento.
+` });
+  return { files, tot, kept };
 }
 
 const CRC_TABLE = (() => {
@@ -561,22 +892,29 @@ function drawSignal(cv, data, nCh, opts = {}) {
   if (frames < 2) return;
   const totalFrames = opts.totalFrames || frames;
   let lo = Infinity, hi = -Infinity;
-  for (let i = 0; i < data.length; i++) { const v = data[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
+  for (let i = 0; i < data.length; i++) { const v = data[i]; if (v < lo) lo = v; if (v > hi) hi = v; }  // NaN se ignora solo
+  if (!Number.isFinite(lo)) { lo = -1; hi = 1; }
   if (opts.symmetric) { const m = Math.max(Math.abs(lo), Math.abs(hi), 1e-6); lo = -m; hi = m; }
   if (hi - lo < 1e-6) { hi += 0.5; lo -= 0.5; }
   const padY = (hi - lo) * 0.08; lo -= padY; hi += padY;
   const y = (v) => h - ((v - lo) / (hi - lo)) * h;
   const usedW = Math.round((frames / totalFrames) * w);
+  if (opts.bands) {   // ventanas de movimiento sombreadas
+    ctx.fillStyle = 'rgba(74, 222, 128, .14)';
+    for (const [a, b] of opts.bands) ctx.fillRect(a * usedW, 0, (b - a) * usedW, h);
+  }
   for (let c = 0; c < nCh; c++) {
     ctx.strokeStyle = CH_COLORS[c % CH_COLORS.length];
     ctx.lineWidth = (opts.thumb ? 1 : 1.2) * dpr;
     ctx.beginPath();
+    let pen = false;
     for (let x = 0; x < usedW; x++) {
       const a = Math.floor((x / usedW) * frames);
       const b = Math.max(a + 1, Math.floor(((x + 1) / usedW) * frames));
       let mn = Infinity, mx = -Infinity;
       for (let i = a; i < b && i < frames; i++) { const v = data[i * nCh + c]; if (v < mn) mn = v; if (v > mx) mx = v; }
-      if (x === 0) ctx.moveTo(x, y(mn)); else ctx.lineTo(x, y(mn));
+      if (mn === Infinity) { pen = false; continue; }   // hueco (muestras perdidas)
+      if (!pen) { ctx.moveTo(x, y(mn)); pen = true; } else ctx.lineTo(x, y(mn));
       if (mx !== mn) ctx.lineTo(x, y(mx));
     }
     ctx.stroke();
@@ -593,16 +931,19 @@ function plotLoop() {
   if (state.view === 'project' || state.view === 'folder') {
     const cv = state.view === 'project' ? $('livePlot') : $('folderPlot');
     if (stream.ring) {
-      drawSignal(cv, stream.snapshot(), stream.channels.length, { symmetric: isEmg, totalFrames: stream.ringLen });
+      const vc = viewChannel(stream.snapshot(), stream.channels);
+      drawSignal(cv, vc.data, vc.nCh, { symmetric: isEmg, totalFrames: stream.ringLen });
     }
     if (state.view === 'folder' && recorder.active) {
+      recorder.updatePhase();
       const pct = (recorder.pos / recorder.target) * 100;
       $('progressBar').style.width = pct + '%';
       const left = (recorder.target - recorder.pos) / recorder.fs;
       const stalled = performance.now() - stream.lastDataAt > 1500;
+      const trialTxt = recorder.protocol ? `Trial ${Math.max(1, recorder.lastTrial + 1)} / ${recorder.protocol.trials} · ` : '';
       $('recStatus').textContent = stalled
         ? 'No llegan datos del dispositivo…'
-        : `Grabando · faltan ${left.toFixed(0)} s` + (recorder.lost ? ` · ${recorder.lost} muestras perdidas` : '');
+        : `${trialTxt}Grabando · faltan ${left.toFixed(0)} s` + (recorder.lost ? ` · ${recorder.lost} muestras perdidas` : '');
     }
   }
   requestAnimationFrame(plotLoop);
@@ -657,8 +998,9 @@ function updateStreamInfo() {
   if (!stream.mode) { el.textContent = 'Sin señal — conecta el ESP32 o usa el simulador'; $('plotLegend').textContent = ''; }
   else {
     el.textContent = `${stream.devName} · ${stream.fs} Hz · ${stream.channels.length} canal(es)`;
-    $('plotLegend').innerHTML = stream.channels
-      .map((c, i) => `<span class="swatch" style="background:${CH_COLORS[i % CH_COLORS.length]}"></span> ${esc(c)}`).join('&nbsp;&nbsp;');
+    $('plotLegend').innerHTML = viewChannel(new Float32Array(0), stream.channels).names
+      .map((c, i) => `<span class="swatch" style="background:${CH_COLORS[i % CH_COLORS.length]}"></span> ${esc(c)}`).join('&nbsp;&nbsp;') +
+      (stream.channels.includes('raw_mV') ? ' <span class="muted">(se graba también raw_mV)</span>' : '');
   }
   $('btnConnect').textContent = stream.mode === 'ble' ? 'Desconectar' : 'Conectar';
   $('btnSim').textContent = stream.mode === 'sim' ? 'Detener simulador' : 'Simulador';
@@ -705,6 +1047,8 @@ async function renderDeviceList() {
 }
 
 function renderMoveRows() {
+  $('movesStep').hidden = form.type === 'emg';
+  $('emgProtoNote').hidden = form.type !== 'emg';
   const list = $('moveRows');
   list.innerHTML = '';
   for (const m of form.moves) {
@@ -745,7 +1089,7 @@ async function renderHome() {
     const el = document.createElement('div');
     el.className = 'item clickable';
     el.innerHTML = `<div class="grow"><div class="title">${esc(p.name)}</div>
-      <div class="small muted">${DEVICE_TYPES[p.type].label} · ${esc(dev.name)} · ${p.movements.length} carpetas · ${count} grabaciones · creado ${fmtDate(p.createdAt)}</div></div>
+      <div class="small muted">${DEVICE_TYPES[p.type].label} · ${esc(dev.name)} · ${isProto(p) ? 'protocolo de trials' : p.movements.length + ' carpetas'} · ${count} grabaciones · creado ${fmtDate(p.createdAt)}</div></div>
       <span class="muted">›</span>`;
     el.onclick = () => openProject(p);
     list.appendChild(el);
@@ -778,6 +1122,20 @@ async function renderProject() {
   updateStreamInfo();
 
   const recs = await DB.recordings(p.id);
+  const proto = isProto(p);
+  $('protoCard').hidden = !proto;
+  $('sessionGrid').hidden = !proto;
+  $('btnNewSession').hidden = !proto;
+  $('folderGrid').hidden = proto;
+  $('addMoves').hidden = proto;
+  $('foldersTitle').textContent = proto ? 'Sesiones · cada sesión = electrodos nuevos, colocados desde cero' : 'Carpetas · elige el movimiento a grabar';
+  $('btnZip').textContent = proto ? 'Descargar dataset (ZIP con data/raw, metadata, calidad y Edge Impulse)' : 'Guardar ZIP para Edge Impulse';
+  if (proto) {
+    renderProtocolForm(recs.some((r) => r.kind === 'protocol'));
+    renderSessions(recs.filter((r) => r.kind === 'protocol'));
+    $('btnZip').disabled = !recs.some((r) => r.kind === 'protocol');
+    return;
+  }
   const grid = $('folderGrid');
   grid.innerHTML = '';
   for (const m of p.movements) {
@@ -842,12 +1200,85 @@ async function renderProject() {
   $('btnZip').disabled = recs.length === 0;
 }
 
-// ---- Pantalla 3: carpeta --------------------------------------------------------
-async function openFolder(m, push = true) {
-  state.movement = m;
-  $('title').textContent = m.name;
-  $('subtitle').textContent = state.project.name;
-  $('folderHint').textContent = m.hint || '';
+// ---- Protocolo y sesiones (proyectos EMG nuevos) ------------------------------
+function protoSummary(p) {
+  const T = trialLen(p);
+  return `${p.trials} trials × ${T} s = ${p.trials * T} s por grabación · ${p.recs_per_session} grabaciones por sesión · ` +
+    `trial: reposo ${p.rest_s} s → aviso ${p.warning_s} s → movimiento ${p.move_s} s → reposo ${p.between_s} s · prueba: ${p.test_sessions}`;
+}
+
+function renderProtocolForm(hasRecs) {
+  const p = state.project;
+  $('protoSummary').textContent = protoSummary(p.protocol);
+  $('protoWarn').hidden = !hasRecs;
+  const box = $('protoForm');
+  box.innerHTML = '';
+  for (const f of PROTOCOL_FIELDS) {
+    const lab = document.createElement('label');
+    lab.className = 'field';
+    lab.textContent = f.label;
+    const inp = document.createElement('input');
+    inp.type = f.num ? 'number' : 'text';
+    if (f.num) { inp.min = '0'; inp.step = f.int ? '1' : '0.1'; }
+    inp.placeholder = f.ph || '';
+    inp.value = p.protocol[f.k] ?? '';
+    inp.onchange = async () => {
+      let v = inp.value.trim();
+      if (f.num && !(f.optional && v === '')) {
+        v = Number(v);
+        if (!Number.isFinite(v) || v < 0 || (f.int && !Number.isInteger(v)) || (['trials', 'recs_per_session', 'adc_bits'].includes(f.k) && v < 1)) {
+          toast('Valor no válido'); inp.value = p.protocol[f.k]; return;
+        }
+      }
+      if (f.k === 'participant') v = (v || 'P01').toUpperCase();
+      p.protocol[f.k] = v;
+      if (trialLen(p.protocol) <= 0) { toast('El trial tiene que durar más de 0 s'); }
+      await saveProject();
+      $('protoSummary').textContent = protoSummary(p.protocol);
+      if (f.k === 'test_sessions' || f.k === 'recs_per_session') renderProject();
+    };
+    lab.appendChild(inp);
+    box.appendChild(lab);
+  }
+}
+
+function renderSessions(recs) {
+  const p = state.project;
+  const ids = new Set(recs.map((r) => r.session));
+  ids.add(p.currentSession || 'S01');
+  const grid = $('sessionGrid');
+  grid.innerHTML = '';
+  for (const sid of [...ids].sort((a, b) => sessNum(a) - sessNum(b))) {
+    const rs = recs.filter((r) => r.session === sid);
+    const set = sessionSet(p, sid);
+    const date = rs.length ? isoDate(Math.min(...rs.map((r) => r.createdAt))) : 'sin grabaciones';
+    const target = p.protocol.recs_per_session;
+    const b = document.createElement('div');
+    b.className = 'folder' + (rs.length >= target ? ' full' : '');
+    b.tabIndex = 0;
+    b.setAttribute('role', 'button');
+    b.innerHTML = `<span class="name">Sesión ${esc(sid)} <span class="set-tag ${set}">${set === 'test' ? 'Prueba' : 'Entrenamiento'}</span></span>
+      <span class="small muted">${rs.length} / ${target} grabaciones · ${esc(date)}</span>
+      <div class="bar"><div style="width:${Math.min(100, (rs.length / target) * 100)}%"></div></div>`;
+    b.onclick = () => openSession(sid);
+    b.onkeydown = (e) => { if (e.key === 'Enter') openSession(sid); };
+    grid.appendChild(b);
+  }
+}
+
+async function openSession(sid, push = true) {
+  const p = state.project;
+  p.currentSession = sid;
+  await saveProject();
+  state.movement = { id: sid, session: true, name: `Sesión ${sid}` };
+  const set = sessionSet(p, sid);
+  $('title').textContent = `Sesión ${sid}`;
+  $('subtitle').textContent = `${p.name} · ${set === 'test' ? 'PRUEBA' : 'entrenamiento'}`;
+  $('folderHint').textContent = `1) Coloca electrodos NUEVOS desde cero y toma una foto sin cara (figures/placement_${sid}.jpg). ` +
+    `2) Graba ${p.protocol.recs_per_session} veces, con 1 minuto de pausa entre grabaciones. ` +
+    `La persona sigue la pantalla: ${protoSummary(p.protocol)}.`;
+  $('fieldDuration').hidden = true;
+  $('fieldBpm').hidden = true;
   $('phase').textContent = 'Listo';
   $('metronome').className = 'metronome';
   $('progressBar').style.width = '0';
@@ -856,8 +1287,63 @@ async function openFolder(m, push = true) {
   await renderFolder();
 }
 
+// ---- Pantalla 3: carpeta --------------------------------------------------------
+async function openFolder(m, push = true) {
+  state.movement = m;
+  $('title').textContent = m.name;
+  $('subtitle').textContent = state.project.name;
+  $('folderHint').textContent = m.hint || '';
+  $('fieldDuration').hidden = false;
+  $('fieldBpm').hidden = false;
+  $('phase').textContent = 'Listo';
+  $('metronome').className = 'metronome';
+  $('progressBar').style.width = '0';
+  $('recStatus').textContent = '';
+  show('folder', push);
+  await renderFolder();
+}
+
+async function renderSessionRecs() {
+  const sid = state.movement.id;
+  const p = state.project;
+  const recs = (await DB.recordings(p.id)).filter((r) => r.kind === 'protocol' && r.session === sid).sort((a, b) => b.n - a.n);
+  $('folderCount').textContent = `${recs.length} / ${p.protocol.recs_per_session}`;
+  $('noRecs').hidden = recs.length > 0;
+  $('noRecs').textContent = 'Aún no hay grabaciones en esta sesión.';
+  const list = $('recList');
+  list.innerHTML = '';
+  for (const r of recs) {
+    const q = trialQuality(r);
+    const rej = q.filter((x) => x.rejected);
+    const el = document.createElement('div');
+    el.className = 'item rec';
+    el.innerHTML = `<span class="num">R${pad(r.n)}</span><canvas></canvas>
+      <div class="grow"><div class="title">${fmtDate(r.createdAt)}</div>
+      <div class="small muted">${r.trials} trials · ${(r.frames / r.fs).toFixed(0)} s${r.lost ? ` · ${r.lost} muestras perdidas` : ''}${r.source === 'simulador' ? ' · simulador' : ''}</div>
+      <div class="small ${rej.length ? 'warn' : 'ok'}">${rej.length ? `${rej.length} trial(s) rechazado(s): ` + esc(rej.map((x) => 'T' + x.k + ' ' + x.reasons.join(', ')).join('; ')) : 'Todos los trials pasan la regla de calidad'}${q[0] && !q[0].checkedSat ? ' · sin raw_mV: no se revisó saturación' : ''}</div></div>
+      <div class="actions">
+        <button class="btn" data-a="ver">Ver</button>
+        <button class="btn" data-a="csv">CSV</button>
+        <button class="btn danger ghost" data-a="del">Borrar</button>
+      </div>`;
+    list.appendChild(el);
+    const vc = viewChannel(r.data, r.channels);
+    drawSignal(el.querySelector('canvas'), vc.data, vc.nCh, { thumb: true, symmetric: true, bands: moveBands(r) });
+    el.querySelector('[data-a=ver]').onclick = () => preview(r);
+    el.querySelector('[data-a=csv]').onclick = () => download(new Blob([recToCsv(r)], { type: 'text/csv' }), recFileName(r));
+    el.querySelector('[data-a=del]').onclick = async () => {
+      if (!confirm(`¿Borrar ${recBase(r)}?`)) return;
+      await DB.del('recordings', r.id);
+      renderFolder();
+    };
+  }
+  updateRecordButton(recs.length, recs.reduce((m, r) => Math.max(m, r.n), 0) + 1);
+}
+
 async function renderFolder() {
   if (!state.movement) return;
+  if (state.movement.session) return renderSessionRecs();
+  $('noRecs').textContent = 'Aún no hay grabaciones de este movimiento.';
   const recs = (await DB.recordings(state.project.id))
     .filter((r) => r.label === state.movement.id)
     .sort((a, b) => b.n - a.n);
@@ -891,13 +1377,16 @@ async function renderFolder() {
   updateRecordButton(recs.length);
 }
 
-let folderCountCache = 0;
-function updateRecordButton(count) {
+let folderCountCache = 0, nextRecCache = 1;
+function updateRecordButton(count, nextN) {
   if (typeof count === 'number') folderCountCache = count;
-  const full = folderCountCache >= MAX_RECS;
+  if (typeof nextN === 'number') nextRecCache = nextN;
+  const session = !!state.movement?.session;
+  const full = !session && folderCountCache >= MAX_RECS;
   const busy = recorder.active || recorder.counting;
   $('btnRecord').disabled = full || !stream.mode;
-  $('btnRecord').textContent = full ? `Llegaste a ${MAX_RECS} grabaciones` : (folderCountCache ? 'Grabar otra vez' : 'Grabar');
+  $('btnRecord').textContent = session ? `Grabar R${pad(nextRecCache)}`
+    : full ? `Llegaste a ${MAX_RECS} grabaciones` : (folderCountCache ? 'Grabar otra vez' : 'Grabar');
   $('btnRecord').hidden = busy;
   if (!busy && state.view === 'folder') {
     $('recStatus').textContent = !stream.mode ? 'Regresa y conecta el dispositivo (o el simulador) para grabar.' : '';
@@ -920,12 +1409,14 @@ function setRecordingUI(on) {
 }
 
 function preview(r) {
-  $('previewTitle').textContent = `#${r.n} · ${state.movement.name}`;
+  const vc = viewChannel(r.data, r.channels);
+  $('previewTitle').textContent = r.kind === 'protocol' ? `${recBase(r)} · ${r.trials} trials` : `#${r.n} · ${state.movement.name}`;
   $('previewInfo').innerHTML = `${fmtDate(r.createdAt)} (hora MTY) · ${(r.frames / r.fs).toFixed(1)} s · ${r.fs} Hz · ` +
-    r.channels.map((c, i) => `<span class="swatch" style="background:${CH_COLORS[i % CH_COLORS.length]}"></span> ${esc(c)}`).join(' ') +
+    vc.names.map((c, i) => `<span class="swatch" style="background:${CH_COLORS[i % CH_COLORS.length]}"></span> ${esc(c)}`).join(' ') +
+    (r.kind === 'protocol' ? ' · en verde: ventanas de movimiento' : '') +
     `<br>Archivo: ${esc(recFileName(r))}`;
   $('previewDlg').showModal();
-  requestAnimationFrame(() => drawSignal($('previewPlot'), r.data, r.channels.length, { symmetric: state.project.type === 'emg' }));
+  requestAnimationFrame(() => drawSignal($('previewPlot'), vc.data, vc.nCh, { symmetric: state.project.type === 'emg', bands: moveBands(r) }));
 }
 
 // ---- Navegación (botón atrás de Android incluido) -------------------------------
@@ -956,6 +1447,7 @@ async function handleNav(st) {
   }
   if (st.view === 'folder') {
     if (state.project?.id !== p.id) await openProject(p, false);
+    if (isProto(state.project)) { await openSession(st.mid || state.project.currentSession || 'S01', false); return; }
     const m = state.project.movements.find((x) => x.id === st.mid);
     if (m) await openFolder(m, false); else history.back();
   }
@@ -1009,9 +1501,11 @@ function bindEvents() {
   $('btnCreate').onclick = async () => {
     const name = $('newName').value.trim();
     if (!name) { toast('Escribe un nombre para el proyecto'); $('newName').focus(); return; }
-    const moves = form.moves.filter((m) => m.on).map(({ on, ...m }) => m);
-    if (!moves.length) { toast('Agrega al menos un movimiento'); return; }
+    const emg = form.type === 'emg';
+    const moves = emg ? [] : form.moves.filter((m) => m.on).map(({ on, ...m }) => m);
+    if (!emg && !moves.length) { toast('Agrega al menos un movimiento'); return; }
     const p = { id: uid(), name, type: form.type, deviceId: form.deviceId, movements: moves, createdAt: Date.now() };
+    if (emg) { p.protocol = { ...EMG_PROTOCOL_DEFAULT }; p.currentSession = 'S01'; }
     await DB.put('projects', p);
     $('newName').value = '';
     resetFormMoves();
@@ -1052,7 +1546,24 @@ function bindEvents() {
   };
   $('btnCancel').onclick = () => recorder.cancel('Grabación cancelada');
 
+  $('btnNewSession').onclick = async () => {
+    const recs = (await DB.recordings(state.project.id)).filter((r) => r.kind === 'protocol');
+    const used = [...recs.map((r) => sessNum(r.session)), sessNum(state.project.currentSession || 'S01')];
+    const cur = state.project.currentSession || 'S01';
+    const curHasRecs = recs.some((r) => r.session === cur);
+    const next = curHasRecs ? Math.max(...used) + 1 : sessNum(cur);
+    await openSession(sessId(next));
+  };
+
   $('btnZip').onclick = async () => {
+    if (isProto(state.project)) {
+      const recs = (await DB.recordings(state.project.id)).filter((r) => r.kind === 'protocol');
+      if (!recs.length) return;
+      const { files, tot, kept } = buildDataset(state.project, recs);
+      download(makeZip(files), `${slug(state.project.name)}_dataset_${fileStamp(Date.now())}.zip`);
+      toast(`ZIP listo: ${recs.length} grabaciones, ${kept} de ${tot} trials pasan la regla de calidad`, 4000);
+      return;
+    }
     const recs = await DB.recordings(state.project.id);
     if (!recs.length) return;
     const files = recs.sort((a, b) => a.label.localeCompare(b.label) || a.n - b.n)
@@ -1093,4 +1604,4 @@ async function main() {
 main().catch((e) => { console.error(e); toast('Error: ' + e.message, 6000); });
 
 // Para pruebas desde la consola
-window._captura = { stream, recorder, DB, recToCsv, makeZip };
+window._captura = { stream, recorder, DB, recToCsv, makeZip, buildDataset, trialQuality, phaseAt };

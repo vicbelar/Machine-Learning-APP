@@ -1,5 +1,5 @@
-// EMG_Captura_BLE: ESP32 que lee el circuito EMG (pin D34) y manda la senal FILTRADA
-// (1 kHz) por Bluetooth a la app web "Captura ML" para hacer el dataset de Edge Impulse.
+// EMG_Captura_BLE: ESP32 que lee el circuito EMG (pin D34) y manda por Bluetooth, a 1 kHz,
+// la senal CRUDA del ADC y la senal FILTRADA a la app web "Captura ML" (dataset de PERLA).
 //
 // Es la misma cadena que EMG_Emisor (BallenaMonitor):
 //   ADC 1 kHz (x4 promediado, mV calibrados) -> notch 60 Hz -> pasa-altas 20 Hz
@@ -9,8 +9,12 @@
 //
 // Bluetooth: se anuncia como "Ballena-EMG-ML" con el servicio Nordic UART (NUS).
 //   App -> ESP (RX):  START  (empieza a mandar)  |  STOP  |  INFO
-//   ESP -> App (TX):  #INFO,Ballena-EMG-ML,1000,emg_mV,10
-//                     D,<seq>,v1,v2,...,v20     (20 muestras = 20 ms por linea)
+//   ESP -> App (TX):  #INFO,Ballena-EMG-ML,1000,raw_mV;emg_mV,10
+//                     D,<seq>,raw1,emg1,raw2,emg2,...   (20 muestras = 20 ms por linea)
+//   raw_mV = entrada del ADC sin filtrar (promedio de 4 lecturas, mV calibrados): es la
+//            que va a data/raw y la que se usa para detectar saturacion (0 V / 3.3 V).
+//   emg_mV = misma senal despues de notch 60 Hz, pasa-altas 20 Hz, pasa-bajas 300 Hz y
+//            rechazo de artefactos (|y| > 1 V = 0): la misma que usa la ballena (EMG_Emisor).
 //   Los valores van en decimas de mV (entero): 123 = 12.3 mV. seq cuenta las lineas
 //   (0..65535) para que la app detecte paquetes perdidos.
 //
@@ -55,7 +59,8 @@ static Biquad hp20    = {0.91497f, -1.82994f, 0.91497f, -1.82272f, 0.83718f, 0, 
 static Biquad lp300   = {0.39134f,  0.78268f, 0.39134f,  0.36953f, 0.19582f, 0, 0, 0, 0};
 
 // ---- Buffer circular (lo escribe el timer, lo lee loop) ---------------------------
-static int16_t ring[RING];
+// 2 valores por muestra: [cruda, filtrada] (int32 porque 3300 mV x 10 no cabe en int16)
+static int32_t ring[RING * 2];
 static volatile uint32_t wIdx = 0;  // muestras escritas (solo el timer)
 static uint32_t rIdx = 0;           // muestras leidas (solo loop)
 static volatile float lastMv = 0;
@@ -67,10 +72,9 @@ static void sampleCb(void *) {
   float y = lp300.process(hp20.process(notch60.process(v)));
   float ym = (fabsf(y) > ARTIFACT_MV) ? 0 : y;
   lastMv = ym;
-  long q = lroundf(ym * SCALE);
-  if (q > 32767) q = 32767;
-  if (q < -32768) q = -32768;
-  ring[wIdx % RING] = (int16_t)q;
+  uint32_t k = (wIdx % RING) * 2;
+  ring[k] = lroundf(v * SCALE);       // cruda
+  ring[k + 1] = lroundf(ym * SCALE);  // filtrada
   wIdx = wIdx + 1;
 }
 
@@ -117,7 +121,7 @@ static void sendText(const char *s, size_t len) {
 
 static void sendInfo() {
   char b[80];
-  int n = snprintf(b, sizeof(b), "#INFO,%s,%lu,emg_mV,%d\n", BLE_NAME, (unsigned long)FS_HZ, SCALE);
+  int n = snprintf(b, sizeof(b), "#INFO,%s,%lu,raw_mV;emg_mV,%d\n", BLE_NAME, (unsigned long)FS_HZ, SCALE);
   sendText(b, n);
 }
 
@@ -204,9 +208,12 @@ void loop() {
     }
     int lines = 0;
     while (w - rIdx >= (uint32_t)BATCH && lines < 4) {
-      char line[220];
+      char line[420];   // 20 muestras x 2 valores x hasta 7 caracteres
       int n = snprintf(line, sizeof(line), "D,%u", seq);
-      for (int i = 0; i < BATCH; i++) n += snprintf(line + n, sizeof(line) - n, ",%d", ring[(rIdx + i) % RING]);
+      for (int i = 0; i < BATCH; i++) {
+        uint32_t k = ((rIdx + i) % RING) * 2;
+        n += snprintf(line + n, sizeof(line) - n, ",%ld,%ld", (long)ring[k], (long)ring[k + 1]);
+      }
       line[n++] = '\n';
       sendText(line, n);
       rIdx += BATCH;

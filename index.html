@@ -43,9 +43,16 @@
         <div id="deviceList" class="list"></div>
         <button id="btnAddDevice" class="btn ghost small-btn">+ Agregar otro dispositivo</button>
 
-        <p class="step"><span>3</span> Movimientos que se tomarán en cuenta para machine learning</p>
-        <div id="moveRows" class="list"></div>
-        <button id="btnNewMoveCustom" class="btn ghost small-btn">+ Agregar otra opción</button>
+        <div id="movesStep" class="list">
+          <p class="step"><span>3</span> Movimientos que se tomarán en cuenta para machine learning</p>
+          <div id="moveRows" class="list"></div>
+          <button id="btnNewMoveCustom" class="btn ghost small-btn">+ Agregar otra opción</button>
+        </div>
+        <p id="emgProtoNote" class="small muted" hidden>
+          <span class="step-inline">3</span> EMG usa el <b>protocolo de trials</b> del curso: un movimiento y reposo,
+          con sesiones (electrodos nuevos en cada una). El movimiento, los tiempos y los datos de los electrodos
+          se configuran dentro del proyecto.
+        </p>
 
         <button id="btnCreate" class="btn primary">Crear proyecto</button>
       </div>
@@ -77,7 +84,20 @@
         <p class="muted small" id="plotLegend"></p>
       </div>
 
-      <h2 class="section-title">Carpetas · elige el movimiento a grabar</h2>
+      <div id="protoCard" class="card" hidden>
+        <h2>Protocolo</h2>
+        <p id="protoSummary" class="small"></p>
+        <p id="protoWarn" class="warn" hidden>Ya hay grabaciones. Cada grabación guarda sus propios tiempos,
+          pero lo correcto es no cambiar el protocolo a mitad del estudio.</p>
+        <details>
+          <summary>Editar protocolo y datos de los electrodos (van a data/metadata.csv)</summary>
+          <div id="protoForm" class="proto-grid"></div>
+        </details>
+      </div>
+
+      <h2 id="foldersTitle" class="section-title">Carpetas · elige el movimiento a grabar</h2>
+      <div id="sessionGrid" class="grid" hidden></div>
+      <button id="btnNewSession" class="btn ghost small-btn" hidden>+ Nueva sesión (electrodos nuevos)</button>
       <div id="folderGrid" class="grid"></div>
       <div id="addMoves" class="chips"></div>
 
@@ -92,7 +112,7 @@
       <div class="card">
         <p id="folderHint" class="muted"></p>
         <div class="settings">
-          <label class="field">Duración
+          <label id="fieldDuration" class="field">Duración
             <select id="selDuration">
               <option value="10">10 s</option>
               <option value="20">20 s</option>
@@ -101,7 +121,7 @@
               <option value="60">60 s (máx.)</option>
             </select>
           </label>
-          <label class="field">Ritmo
+          <label id="fieldBpm" class="field">Ritmo
             <select id="selBpm">
               <option value="20">20 por min (lento)</option>
               <option value="30" selected>30 por min</option>
