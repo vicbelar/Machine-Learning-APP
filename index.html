@@ -37,29 +37,17 @@
           <input id="newName" type="text" maxlength="60">
         </label>
 
-        <p class="step"><span>1</span> Tipo de dispositivo</p>
-        <div class="choice-row">
-          <label class="choice">
-            <input type="radio" name="newType" value="emg" checked>
-            <span><b>EMG</b><small>Señal muscular</small></span>
-          </label>
-          <label class="choice">
-            <input type="radio" name="newType" value="acc">
-            <span><b>Acelerómetro</b><small>Postura / movimiento</small></span>
-          </label>
-        </div>
-
-        <p class="step"><span>2</span> Dispositivo a vincular</p>
+        <p class="step"><span>1</span> Dispositivo a vincular</p>
         <div id="deviceList" class="list"></div>
         <button id="btnAddDevice" class="btn ghost small-btn">+ Agregar otro dispositivo</button>
 
         <div id="movesStep" class="list">
-          <p class="step"><span>3</span> Movimientos que se tomarán en cuenta para machine learning</p>
+          <p class="step"><span>2</span> Movimientos que se tomarán en cuenta para machine learning</p>
           <div id="moveRows" class="list"></div>
           <button id="btnNewMoveCustom" class="btn ghost small-btn">+ Agregar otra opción</button>
         </div>
         <p id="emgProtoNote" class="small muted" hidden>
-          <span class="step-inline">3</span> EMG usa el <b>protocolo de trials</b> del curso: un movimiento y reposo,
+          <span class="step-inline">2</span> EMG usa el <b>protocolo de trials</b> del curso: un movimiento y reposo,
           con sesiones (electrodos nuevos en cada una). El movimiento, los tiempos y los datos de los electrodos
           se configuran dentro del proyecto.
         </p>

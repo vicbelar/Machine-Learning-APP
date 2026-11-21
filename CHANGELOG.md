@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-21
+- Removed the accelerometer (TactSuit) part from the app: the device-type choice is gone and the app is EMG only.
+  Accelerometer projects already saved in a browser are hidden, not deleted.
+
 ## v1-report, [TODO date]
 - Added sessions S03 to S06, the quality report, the metadata of every recording and the split by session.
 - Why: the test needs sessions with new electrodes that the model never saw.

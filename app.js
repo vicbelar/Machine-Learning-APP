@@ -1,7 +1,7 @@
 'use strict';
 /*
- * Captura ML — app web para grabar datos de EMG (Ballena Monitor) o acelerómetro
- * (TactSuit) por Bluetooth (Web Bluetooth, servicio Nordic UART) y exportarlos
+ * Captura ML — app web para grabar datos de EMG (Ballena Monitor)
+ * por Bluetooth (Web Bluetooth, servicio Nordic UART) y exportarlos
  * como CSV para Edge Impulse. Todo se guarda en el navegador (IndexedDB), no en el ESP.
  *
  * Protocolo con el ESP32 (ver README.md):
@@ -15,7 +15,7 @@
  *   - sesiones S01, S02, ... (una sesión = electrodos nuevos); las sesiones de prueba se eligen en el protocolo
  *   - el ZIP sale con la estructura del repositorio: data/raw/, data/metadata.csv, QUALITY-REPORT.md
  *     y edge_impulse/training|testing (separado por sesión, nunca al azar)
- * Proyectos de acelerómetro y proyectos EMG viejos siguen con las carpetas + metrónomo.
+ * Proyectos EMG viejos (sin protocolo) siguen con las carpetas + metrónomo.
  */
 
 // ---------------------------------------------------------------------------
@@ -93,32 +93,12 @@ const DEVICE_TYPES = {
         hint: 'Gira el antebrazo (palma abajo / palma arriba) siguiendo el ritmo.' },
     ],
   },
-  acc: {
-    label: 'Acelerómetro',
-    plotSeconds: 10,
-    catalog: [
-      { id: 'linea_base', name: 'Línea base/equilibrio',
-        phases: ['Quieto'],
-        hint: 'De pie, quieto y relajado.' },
-      { id: 'limites_estabilidad', name: 'Inclinaciones voluntarias',
-        phases: ['Inclina', 'Regresa'],
-        hint: 'Inclínate lo más posible sin dar un paso y regresa al centro, siguiendo el ritmo.' },
-      { id: 'deriva_postural', name: 'Deriva postural inducida',
-        phases: ['Deriva', 'Corrige'],
-        hint: 'Registra la deriva inducida y la corrección.' },
-      { id: 'recuperacion_perturbaciones', name: 'Recuperación de perturbaciones',
-        phases: ['Perturbación', 'Recupera'],
-        hint: 'Aplica la perturbación y deja que la persona recupere el equilibrio.' },
-    ],
-  },
 };
 
 // Dispositivos que ya vienen en la app. Se pueden agregar más desde la app ("vincular desde código").
 const BUILTIN_DEVICES = [
   { id: 'ballena', type: 'emg', name: 'Ballena Monitor', namePrefix: 'Ballena-EMG',
     fs: 1000, channels: ['raw_mV', 'emg_mV'], scale: 10, builtin: true },
-  { id: 'tactsuit', type: 'acc', name: 'TactSuit', namePrefix: 'TactSuit',
-    fs: 100, channels: ['ax_g', 'ay_g', 'az_g'], scale: 1000, builtin: true },
 ];
 const CH_COLORS = ['#1f7fb0', '#e0575b', '#2f9e6a', '#e8b54a'];
 
@@ -414,10 +394,7 @@ const stream = {
           if (this.channels.length === 2) vals.push(Math.round((1650 + v) * type.scale));  // raw_mV
           vals.push(Math.round(v * type.scale));
         } else {
-          const ax = 0.08 * Math.sin(2 * Math.PI * 0.25 * t) + 0.01 * (Math.random() - 0.5);
-          const ay = 0.06 * Math.cos(2 * Math.PI * 0.18 * t) + 0.01 * (Math.random() - 0.5);
-          const az = 1 + 0.01 * (Math.random() - 0.5);
-          vals.push(Math.round(ax * type.scale), Math.round(ay * type.scale), Math.round(az * type.scale));
+          vals.push(...this.channels.map(() => 0));
         }
       }
       this.onLine(`D,${this.simSeq},${vals.join(',')}`);
@@ -1077,7 +1054,8 @@ async function renderHome() {
   $('subtitle').textContent = 'Datos de EMG para Edge Impulse';
   await renderDeviceList();
   renderMoveRows();
-  const projects = (await DB.all('projects')).sort((a, b) => b.createdAt - a.createdAt);
+  const projects = (await DB.all('projects')).filter((p) => DEVICE_TYPES[p.type])
+    .sort((a, b) => b.createdAt - a.createdAt);
   const recs = await DB.all('recordings').catch(() => []);
   const list = $('projectList');
   list.innerHTML = '';
@@ -1434,7 +1412,7 @@ async function handleNav(st) {
     await renderHome();
     return;
   }
-  const p = state.project?.id === st.pid ? state.project : (await DB.all('projects')).find((x) => x.id === st.pid);
+  const p = state.project?.id === st.pid ? state.project : (await DB.all('projects')).find((x) => x.id === st.pid && DEVICE_TYPES[x.type]);
   if (!p) return handleNav(null);
   if (st.view === 'project') {
     if (state.project?.id === p.id) {
@@ -1457,15 +1435,6 @@ async function handleNav(st) {
 // Eventos
 // ---------------------------------------------------------------------------
 function bindEvents() {
-  for (const r of document.querySelectorAll('input[name=newType]')) {
-    r.onchange = () => {
-      form.type = r.value;
-      form.deviceId = BUILTIN_DEVICES.find((d) => d.type === form.type).id;
-      resetFormMoves();
-      renderDeviceList();
-      renderMoveRows();
-    };
-  }
   $('btnNewMoveCustom').onclick = () => {
     const name = askMoveName('', form.moves, 'Nombre del nuevo movimiento:');
     if (name) { form.moves.push({ ...newCustomMove(name), on: true }); renderMoveRows(); }
@@ -1473,12 +1442,11 @@ function bindEvents() {
 
   // Agregar dispositivo ("vincular desde código")
   $('btnAddDevice').onclick = () => {
-    const isEmg = form.type === 'emg';
     $('devName').value = '';
     $('devPrefix').value = '';
-    $('devFs').value = isEmg ? 1000 : 100;
-    $('devScale').value = isEmg ? 10 : 1000;
-    $('devChannels').value = isEmg ? 'emg_mV' : 'ax_g, ay_g, az_g';
+    $('devFs').value = 1000;
+    $('devScale').value = 10;
+    $('devChannels').value = 'emg_mV';
     $('deviceDlg').showModal();
   };
   $('devSave').onclick = async (e) => {
