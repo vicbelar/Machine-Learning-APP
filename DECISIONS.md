@@ -5,7 +5,7 @@ We choose with the training sessions (S01 to S04) only, and we open the test ses
 
 ## 7. Features
 **Chose.** Start with two numbers per window of 250 ms of `emg_mV`: the root mean square (RMS) and the waveform length (WL). Then compare them with the "Spectral analysis" block of Edge Impulse.
-**Reason, in our own words.** PERLA already moves the turtle with the RMS, so we know it rises when the hand closes. WL also grows with the size and speed of the signal. We check in a plot of S01 that movement and rest sit apart ([TODO] `figures/two_features.png`).
+**Reason, in our own words.** PERLA already moves the turtle with the RMS, so we know it rises when the forearm muscles contract. WL also grows with the size and speed of the signal. We check in a plot of S01 that movement and rest sit apart ([TODO] `figures/two_features.png`).
 **Not understood yet.** Whether a feature about frequency adds anything when we only have two classes.
 **Sources.** Hudgins B, Parker P, Scott RN. A new strategy for multifunction myoelectric control. *IEEE Trans Biomed Eng* 40(1):82–94, 1993. https://doi.org/10.1109/10.204774 · Phinyomark A, Phukpattaranont P, Limsakul C. Feature reduction and selection for EMG signal classification. *Expert Syst Appl* 39(8):7420–7431, 2012. https://doi.org/10.1016/j.eswa.2012.01.102
 

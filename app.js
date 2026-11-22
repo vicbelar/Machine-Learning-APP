@@ -40,7 +40,7 @@ const MAX_MISSING = 0.01;
 const PHASE_LABELS = ['reposo', 'aviso', 'mover', 'entre'];   // columna "label" de data/raw
 const EMG_PROTOCOL_DEFAULT = {
   participant: 'P01',
-  movement: 'Cerrar y abrir la mano',
+  movement: 'Contracción',
   cue_text: 'CONTRACCIÓN',
   muscle: 'Flexores de los dedos y flexor radial del carpo',
   side: 'derecho',
@@ -58,7 +58,7 @@ const EMG_PROTOCOL_DEFAULT = {
 };
 const PROTOCOL_FIELDS = [
   { k: 'participant', label: 'Código de la persona', ph: 'P01' },
-  { k: 'movement', label: 'Movimiento', ph: 'Cerrar y abrir la mano' },
+  { k: 'movement', label: 'Movimiento', ph: 'Contracción' },
   { k: 'cue_text', label: 'Texto en pantalla durante el movimiento', ph: 'CONTRACCIÓN' },
   { k: 'muscle', label: 'Músculo', ph: 'Flexores de los dedos' },
   { k: 'side', label: 'Lado', ph: 'derecho' },
@@ -1120,10 +1120,11 @@ async function normalizeProject(p) {
   let changed = false;
   if (!p.deviceId) { p.deviceId = BUILTIN_DEVICES.find((d) => d.type === p.type).id; changed = true; }
   if (!Array.isArray(p.movements)) { p.movements = DEVICE_TYPES[p.type].catalog.map((m) => ({ ...m })); changed = true; }
-  // Texto del cue anterior: se cambia a "CONTRACCIÓN" solo si el proyecto aún no tiene grabaciones
+  // Cue y movimiento anteriores: se cambian a "Contracción" solo si el proyecto aún no tiene grabaciones
   // (si ya grabó, el cue se queda como estaba para no cambiar el protocolo a mitad del estudio)
-  if (p.protocol?.cue_text === 'CIERRA Y ABRE LA MANO' && (await DB.recordings(p.id)).length === 0) {
-    p.protocol.cue_text = EMG_PROTOCOL_DEFAULT.cue_text; changed = true;
+  if (p.protocol && (await DB.recordings(p.id)).length === 0) {
+    if (p.protocol.cue_text === 'CIERRA Y ABRE LA MANO') { p.protocol.cue_text = EMG_PROTOCOL_DEFAULT.cue_text; changed = true; }
+    if (p.protocol.movement === 'Cerrar y abrir la mano') { p.protocol.movement = EMG_PROTOCOL_DEFAULT.movement; changed = true; }
   }
   if (changed) await DB.put('projects', p);
   return p;

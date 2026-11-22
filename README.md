@@ -2,7 +2,7 @@
 
 Course: M6 Machine Learning and IoT apps. Team 6, group 604.
 
-Project: **PERLA** (Plataforma Electromiográfica de Rehabilitación Lúdica Adaptativa), a rehabilitation game for children with cerebral palsy at Instituto Nuevo Amanecer. In PERLA, the child closes the hand and a robotic turtle moves. Today the turtle moves when the RMS of one surface EMG channel passes a threshold. Here we build the data to replace that threshold with a model: **tell "close and open the hand" from rest, with one muscle signal of the forearm.**
+Project: **PERLA** (Plataforma Electromiográfica de Rehabilitación Lúdica Adaptativa), a rehabilitation game for children with cerebral palsy at Instituto Nuevo Amanecer. In PERLA, the child closes the hand and a robotic turtle moves. Today the turtle moves when the RMS of one surface EMG channel passes a threshold. Here we build the data to replace that threshold with a model: **tell a contraction of the forearm muscles from rest, with one muscle signal of the forearm.**
 
 > Lines marked `[TODO]` are filled after the recordings. Remove the marks before the tag `v1-report`.
 
@@ -30,7 +30,7 @@ The app stores every sample in the browser and exports the files. Nothing is sav
 **Evidence:** `data/raw/` ([TODO 24] files), `data/metadata.csv` ([TODO 24] rows), `cue/`, the app (`index.html`, `app.js`, `style.css`) and the firmware (`firmware/EMG_Captura_BLE/`).
 
 ### 2. Task
-The person closes and opens the right hand, the same movement a child does to move the turtle in PERLA. Two classes: **movement** (`mover`) and **rest** (`reposo`). The person sits, with the forearm on the table and the palm up. [TODO: confirm "close and open repeatedly" or "close and hold"]
+The person contracts the muscles of the right forearm (*contracción*) and holds the contraction during the whole action window (3 s), then relaxes. These are the muscles a child uses to move the turtle in PERLA. Two classes: **movement** (`mover`) and **rest** (`reposo`). The person sits, with the forearm on the table and the palm up.
 
 **Evidence:** `PROTOCOL.md`, `figures/placement_S01.jpg`.
 

@@ -19,7 +19,7 @@ No se borran al cerrar la página, pero sí si borras los datos del sitio en Chr
 Los proyectos EMG nuevos siguen el método del Report 1 (una persona, **un movimiento**, dos clases: movimiento y reposo):
 
 1. **Nuevo proyecto** → tipo **EMG** → **Crear proyecto**.
-2. En **Protocolo** → *Editar protocolo…* se ponen el movimiento (por defecto *Cerrar y abrir la mano*), los tiempos
+2. En **Protocolo** → *Editar protocolo…* se ponen el movimiento (por defecto *Contracción*), los tiempos
    del trial, los trials por grabación, las sesiones de prueba y los datos de los electrodos (distancia, ganancia…).
    Todo eso se copia a `data/metadata.csv`. **No cambiarlo a mitad del estudio.**
 3. **Conectar** (o **Simulador** para probar).
