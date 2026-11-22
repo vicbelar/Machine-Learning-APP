@@ -39,7 +39,7 @@ The person closes and opens the right hand, the same movement a child does to mo
 |---|---|---|
 | Rest before | 0 to 4 | Reposo |
 | Warning cue | 4 to 5 | Prepárate (yellow, beep) |
-| Action window | 5 to 8 | CIERRA Y ABRE LA MANO (green, beep) |
+| Action window | 5 to 8 | CONTRACCIÓN (green, beep) |
 | Rest between trials | 8 to 11 | Reposo (beep) |
 
 One recording holds 5 trials, so it lasts 55 s. The app shows the cue from the count of received samples, so the label in the file and the cue on the screen use the same clock.
