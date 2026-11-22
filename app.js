@@ -45,6 +45,7 @@ const EMG_PROTOCOL_DEFAULT = {
   muscle: 'Flexores de los dedos y flexor radial del carpo',
   side: 'derecho',
   rest_s: 4, warning_s: 1, move_s: 3, between_s: 3,
+  move_bpm: 30,   // ritmo (pulsos por minuto) que suena durante la ventana de movimiento; 0 = sin ritmo
   trials: 5,
   recs_per_session: 4,
   test_sessions: 'S05,S06',
@@ -65,6 +66,7 @@ const PROTOCOL_FIELDS = [
   { k: 'warning_s', label: 'Aviso (s)', num: true },
   { k: 'move_s', label: 'Movimiento (s)', num: true },
   { k: 'between_s', label: 'Reposo entre trials (s)', num: true },
+  { k: 'move_bpm', label: 'Ritmo durante el movimiento (pulsos por minuto, 0 = sin ritmo)', num: true, int: true },
   { k: 'trials', label: 'Trials por grabación', num: true, int: true },
   { k: 'recs_per_session', label: 'Grabaciones por sesión', num: true, int: true },
   { k: 'test_sessions', label: 'Sesiones de prueba', ph: 'S05,S06' },
@@ -155,6 +157,8 @@ function phaseAt(t, p) {
   else if (u < p.rest_s + p.warning_s + p.move_s) ph = 2;
   return { trial, ph };
 }
+// Ritmo de la ventana de movimiento (los proyectos creados antes de este campo usan 30 por minuto)
+const moveBpm = (p) => { const v = Number(p?.move_bpm); return p?.move_bpm === undefined || p?.move_bpm === '' || !Number.isFinite(v) ? 30 : v; };
 const isProto = (p) => !!(p && p.type === 'emg' && p.protocol);
 const sessId = (n) => 'S' + pad(n);
 const sessNum = (sid) => Number(String(sid).replace(/\D/g, '')) || 0;
@@ -635,14 +639,34 @@ const recorder = {
     if (!this.active || !this.protocol) return;
     const p = this.protocol;
     const total = p.trials * trialLen(p);
-    const { trial, ph } = phaseAt(Math.min(this.pos / this.fs, total - 1e-6), p);
-    if (ph === this.lastPh && trial === this.lastTrial) return;
-    this.lastPh = ph; this.lastTrial = trial;
+    const t = Math.min(this.pos / this.fs, total - 1e-6);
+    const { trial, ph } = phaseAt(t, p);
+    if (ph === this.lastPh && trial === this.lastTrial) { this.moveBeat(t, trial, ph); return; }
+    this.lastPh = ph; this.lastTrial = trial; this.lastBeat = 0;
     $('phase').textContent = ['Reposo', 'Prepárate', p.cue_text || 'Movimiento', 'Reposo'][ph];
     $('metronome').className = 'metronome recording' + (ph === 1 ? ' warn' : ph === 2 ? ' move' : '');
     if (ph === 1) this.beep(660);
-    else if (ph === 2) this.beep(990, 0.15);
+    else if (ph === 2) { this.beep(990, 0.15); this.pulse(); }   // primer pulso del ritmo
     else if (ph === 3) this.beep(520);
+  },
+
+  // Ritmo dentro de la ventana de movimiento: un pulso cada 60/bpm s, contado con las muestras
+  // recibidas (el mismo reloj que la etiqueta "mover" del CSV). Tonos alternados como el metrónomo.
+  moveBeat(t, trial, ph) {
+    const p = this.protocol;
+    const bpm = moveBpm(p);
+    if (ph !== 2 || bpm <= 0) return;
+    const tIn = t - trial * trialLen(p) - p.rest_s - p.warning_s;
+    const k = Math.floor(tIn * bpm / 60 + 1e-9);
+    if (k <= this.lastBeat) return;
+    this.lastBeat = k;
+    this.beep(k % 2 === 0 ? 990 : 740);
+    this.pulse();
+  },
+  pulse() {
+    const met = $('metronome');
+    met.classList.add('beat');
+    setTimeout(() => met.classList.remove('beat'), 180);
   },
 
   tick() {
@@ -843,7 +867,7 @@ function buildDataset(project, recs) {
   let tot = 0, rejSat = 0, rejGap = 0, keptTrain = 0, keptTest = 0, noSat = false;
   const cols = ['file_name', 'participant', 'session', 'date', 'recording', 'trials', 'rest_s', 'warning_s', 'move_s',
     'between_s', 'fs_hz', 'movement', 'muscle', 'side', 'electrode_type', 'electrode_distance_cm', 'skin_preparation',
-    'sensor_model', 'gain', 'adc_bits', 'channels', 'cue', 'set', 'samples', 'missing_samples', 'trials_rejected', 'notes'];
+    'sensor_model', 'gain', 'adc_bits', 'channels', 'cue', 'move_bpm', 'set', 'samples', 'missing_samples', 'trials_rejected', 'notes'];
   recs.sort((a, b) => sessNum(a.session) - sessNum(b.session) || a.n - b.n);
   for (const r of recs) {
     const p = r.protocol;
@@ -857,7 +881,7 @@ function buildDataset(project, recs) {
     meta.push([`${base}.csv`, r.participant, r.session, isoDate(r.createdAt), r.n, r.trials, p.rest_s, p.warning_s,
       p.move_s, p.between_s, r.fs, p.movement, p.muscle, p.side, p.electrode_type, p.electrode_distance_cm,
       p.skin_preparation, p.sensor_model, p.gain, p.adc_bits, r.channels.join(';'),
-      'Captura ML app, on-screen trial timer', set, r.frames, r.lost, rejected.length, notes]);
+      'Captura ML app, on-screen trial timer', moveBpm(p), set, r.frames, r.lost, rejected.length, notes]);
     qRows.push(`| ${base}.csv | ${r.session} | ${set} | ${r.trials} | ${rejected.length} | ${rejected.length ? rejected.map((x) => `trial ${x.k}: ${x.reasons.join(' and ')}`).join('; ') : 'kept'} |`);
     // Edge Impulse: por cada trial que pasa la regla, una ventana de reposo y una de movimiento
     const ch = Math.max(0, r.channels.indexOf('emg_mV'));
@@ -1336,7 +1360,8 @@ async function renderProject() {
 function protoSummary(p) {
   const T = trialLen(p);
   return `${p.trials} trials × ${T} s = ${p.trials * T} s por grabación · ${p.recs_per_session} grabaciones por sesión · ` +
-    `trial: reposo ${p.rest_s} s → aviso ${p.warning_s} s → movimiento ${p.move_s} s → reposo ${p.between_s} s · prueba: ${p.test_sessions}`;
+    `trial: reposo ${p.rest_s} s → aviso ${p.warning_s} s → movimiento ${p.move_s} s → reposo ${p.between_s} s · ` +
+    `ritmo ${moveBpm(p) ? moveBpm(p) + ' por min' : 'sin ritmo'} · prueba: ${p.test_sessions}`;
 }
 
 function renderProtocolForm(hasRecs) {
@@ -1353,7 +1378,7 @@ function renderProtocolForm(hasRecs) {
     inp.type = f.num ? 'number' : 'text';
     if (f.num) { inp.min = '0'; inp.step = f.int ? '1' : '0.1'; }
     inp.placeholder = f.ph || '';
-    inp.value = p.protocol[f.k] ?? '';
+    inp.value = f.k === 'move_bpm' ? moveBpm(p.protocol) : (p.protocol[f.k] ?? '');
     inp.onchange = async () => {
       let v = inp.value.trim();
       if (f.num && !(f.optional && v === '')) {

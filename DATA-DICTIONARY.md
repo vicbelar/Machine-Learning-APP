@@ -20,6 +20,7 @@ One row describes one recording. The app Captura ML writes this file.
 | adc_bits | the bits of the converter | 12 |
 | channels | the channels in the file | `raw_mV;emg_mV` |
 | cue | the cue the person watched | text |
+| move_bpm | the rhythm of the beat during the action window | beats per minute, 0 = no beat |
 | set | the use of the recording | `train` (S01 to S04) or `test` (S05, S06) |
 | samples | samples in the file | count |
 | missing_samples | samples lost over Bluetooth (empty cells) | count |

@@ -179,6 +179,7 @@ input[type=checkbox] { accent-color: var(--sea); width: 16px; height: 16px; }
 .metronome.recording { border-color: var(--rec); }
 .metronome.warn { background: var(--warn-soft); border-color: var(--gold); color: var(--warn); }
 .metronome.move { background: var(--ok); border-color: var(--ok); color: #fff; font-size: 2.3rem; }
+.metronome.move.beat { background: #3fbf85; transform: scale(1.03); }   /* pulso del ritmo sobre el verde */
 .progress { height: 10px; background: var(--sea-soft); border-radius: 5px; overflow: hidden; }
 .progress div { height: 100%; width: 0; background: var(--rec); border-radius: 5px; }
 
