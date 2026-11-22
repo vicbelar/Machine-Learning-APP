@@ -224,6 +224,136 @@ const DB = {
 };
 
 // ---------------------------------------------------------------------------
+// Historial del equipo (Firebase Cloud Firestore, proyecto "captura-perla")
+// Solo sube un RESUMEN de cada grabación (sesión, fecha, trials, rechazos). La señal se queda en este navegador.
+// Usa la API REST de Firestore, sin librerías. Si no hay internet, el resumen queda pendiente y se sube después.
+// ---------------------------------------------------------------------------
+const CLOUD = {
+  projectId: 'captura-perla',
+  apiKey: 'AIzaSyCOYxDcy2am92-N89e3Sv6RhBZbLJ8lkuw',   // llave web de Firebase: es pública por diseño
+  collection: 'grabaciones',
+};
+const Cloud = {
+  base: `https://firestore.googleapis.com/v1/projects/${CLOUD.projectId}/databases/(default)/documents`,
+  rows: [],
+  error: '',
+  lsGet(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (_) { return d; } },
+  lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) { /* sin almacenamiento */ } },
+  get who() { return this.lsGet('cloudWho', ''); },
+  set who(v) { this.lsSet('cloudWho', v); },
+  pending() { return this.lsGet('cloudPending', {}); },
+
+  // Resumen de una grabación del protocolo
+  summary(rec, project) {
+    const q = trialQuality(rec);
+    return {
+      file: recBase(rec) + '.csv',
+      project: project.name,
+      participant: rec.participant,
+      session: rec.session,
+      recording: rec.n,
+      date: isoDate(rec.createdAt),
+      createdAt: rec.createdAt,
+      trials: rec.trials,
+      trials_rejected: q.filter((x) => x.rejected).length,
+      missing_samples: rec.lost,
+      set: sessionSet(project, rec.session),
+      movement: rec.protocol.movement || '',
+      source: rec.source || '',
+      recorded_by: this.who || '',
+    };
+  },
+  toFields(o) {
+    const f = {};
+    for (const [k, v] of Object.entries(o)) {
+      f[k] = Number.isInteger(v) ? { integerValue: String(v) } : { stringValue: String(v ?? '') };
+    }
+    return f;
+  },
+  fromFields(f) {
+    const o = {};
+    for (const [k, v] of Object.entries(f || {})) o[k] = 'integerValue' in v ? Number(v.integerValue) : v.stringValue ?? '';
+    return o;
+  },
+  async req(method, path, body) {
+    const sep = path.includes('?') ? '&' : '?';
+    const r = await fetch(`${this.base}${path}${sep}key=${CLOUD.apiKey}`, {
+      method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!r.ok) {
+      let msg = `HTTP ${r.status}`;
+      try { const j = await r.json(); msg = (Array.isArray(j) ? j[0] : j)?.error?.message || msg; } catch (_) { /* nada */ }
+      throw new Error(msg);
+    }
+    return r.json();
+  },
+
+  // Se llama al guardar una grabación: la deja pendiente y trata de subirla
+  push(rec, project) {
+    const p = this.pending();
+    p[rec.id] = this.summary(rec, project);
+    this.lsSet('cloudPending', p);
+    return this.flush();
+  },
+  async flush() {
+    const p = this.pending();
+    let sent = 0;
+    for (const [id, doc] of Object.entries(p)) {
+      try {
+        await this.req('PATCH', `/${CLOUD.collection}/${encodeURIComponent(id)}`, { fields: this.toFields(doc) });
+        const now = this.pending(); delete now[id]; this.lsSet('cloudPending', now);
+        sent++;
+      } catch (e) { this.error = e.message; break; }
+    }
+    if (sent) { this.error = ''; await this.refresh(); }
+    return sent;
+  },
+  async remove(id) {
+    const p = this.pending();
+    if (p[id]) { delete p[id]; this.lsSet('cloudPending', p); }
+    try { await this.req('DELETE', `/${CLOUD.collection}/${encodeURIComponent(id)}`); } catch (e) { toast('No se pudo borrar del historial del equipo: ' + e.message, 4000); }
+  },
+  async refresh() {
+    try {
+      const out = await this.req('POST', ':runQuery', { structuredQuery: {
+        from: [{ collectionId: CLOUD.collection }],
+        orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
+        limit: 500,
+      } });
+      this.rows = out.filter((x) => x.document).map((x) => ({ id: x.document.name.split('/').pop(), ...this.fromFields(x.document.fields) }));
+      this.error = '';
+    } catch (e) { this.error = e.message; }
+    if (state.view === 'home') renderHistory();
+  },
+};
+
+function renderHistory() {
+  const list = $('historyList');
+  if (!list) return;
+  const rows = Cloud.rows;
+  const nPend = Object.keys(Cloud.pending()).length;
+  const sessions = [...new Set(rows.map((r) => r.session))].sort();
+  $('historyStatus').innerHTML = Cloud.error
+    ? `<span class="warn">Sin conexión con el historial: ${esc(Cloud.error)}</span>`
+    : `${rows.length} grabaciones${sessions.length ? ' · sesiones ' + esc(sessions.join(', ')) : ''}`;
+  $('historyPending').hidden = nPend === 0;
+  $('historyPending').textContent = `${nPend} grabación(es) de esta compu pendiente(s) de subir. Se suben solas cuando haya internet.`;
+  $('noHistory').hidden = rows.length > 0 || !!Cloud.error;
+  list.innerHTML = '';
+  for (const r of rows) {
+    const el = document.createElement('div');
+    el.className = 'item';
+    const sim = /simulador/i.test(r.source);
+    el.innerHTML = `<div class="grow">
+      <div class="title">${esc(r.file.replace(/\.csv$/, ''))} <span class="pill">${esc(r.set || '')}</span>${sim ? ' <span class="pill sim">simulador</span>' : ''}</div>
+      <div class="small muted">${fmtDate(r.createdAt)} · ${r.trials} trials${r.missing_samples ? ` · ${r.missing_samples} muestras perdidas` : ''} · grabó ${esc(r.recorded_by || 'sin nombre')}</div>
+      <div class="small ${r.trials_rejected ? 'warn' : 'ok'}">${r.trials_rejected ? `${r.trials_rejected} trial(s) rechazado(s)` : 'Todos los trials pasan la regla de calidad'}</div>
+    </div>`;
+    list.appendChild(el);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Flujo de datos (Bluetooth o simulador)
 // ---------------------------------------------------------------------------
 const stream = {
@@ -600,6 +730,7 @@ const recorder = {
     const q = trialQuality(rec);
     const rej = q.filter((x) => x.rejected).length;
     toast(`${recBase(rec)} guardada: ${trials} trials` + (rej ? ` · ${rej} no pasan la regla de calidad` : ''), 3500);
+    Cloud.push(rec, state.project).catch(() => { /* queda pendiente */ });
     await renderFolder();
   },
 
@@ -869,12 +1000,16 @@ function drawSignal(cv, data, nCh, opts = {}) {
   if (frames < 2) return;
   const totalFrames = opts.totalFrames || frames;
   let lo = Infinity, hi = -Infinity;
-  for (let i = 0; i < data.length; i++) { const v = data[i]; if (v < lo) lo = v; if (v > hi) hi = v; }  // NaN se ignora solo
-  if (!Number.isFinite(lo)) { lo = -1; hi = 1; }
-  if (opts.symmetric) { const m = Math.max(Math.abs(lo), Math.abs(hi), 1e-6); lo = -m; hi = m; }
-  if (hi - lo < 1e-6) { hi += 0.5; lo -= 0.5; }
-  const padY = (hi - lo) * 0.08; lo -= padY; hi += padY;
-  const y = (v) => h - ((v - lo) / (hi - lo)) * h;
+  if (opts.range > 0) {   // escala fija (± range): no se reajusta con la señal
+    lo = -opts.range; hi = opts.range;
+  } else {
+    for (let i = 0; i < data.length; i++) { const v = data[i]; if (v < lo) lo = v; if (v > hi) hi = v; }  // NaN se ignora solo
+    if (!Number.isFinite(lo)) { lo = -1; hi = 1; }
+    if (opts.symmetric) { const m = Math.max(Math.abs(lo), Math.abs(hi), 1e-6); lo = -m; hi = m; }
+    if (hi - lo < 1e-6) { hi += 0.5; lo -= 0.5; }
+    const padY = (hi - lo) * 0.08; lo -= padY; hi += padY;
+  }
+  const y = (v) => Math.min(h, Math.max(0, h - ((v - lo) / (hi - lo)) * h));   // lo que se sale queda en el borde
   const usedW = Math.round((frames / totalFrames) * w);
   if (opts.bands) {   // ventanas de movimiento sombreadas
     ctx.fillStyle = 'rgba(47, 158, 106, .14)';
@@ -898,10 +1033,27 @@ function drawSignal(cv, data, nCh, opts = {}) {
   }
   if (!opts.thumb) {
     ctx.fillStyle = '#5f7d90'; ctx.font = `${11 * dpr}px Nunito, system-ui`;
-    ctx.fillText(hi.toFixed(2), 4 * dpr, 12 * dpr);
-    ctx.fillText(lo.toFixed(2), 4 * dpr, h - 4 * dpr);
+    const lab = (v) => (opts.range > 0 ? `${v > 0 ? '+' : ''}${v} mV` : v.toFixed(2));
+    ctx.fillText(lab(hi), 4 * dpr, 12 * dpr);
+    ctx.fillText(lab(lo), 4 * dpr, h - 4 * dpr);
   }
 }
+
+// Escala de las gráficas EMG: fija por defecto (en mV, ±valor); 0 = automática
+const PLOT_SCALES = [50, 100, 250, 500, 1000, 0];
+let plotScale = (() => { try { const v = Number(localStorage.getItem('plotScale')); return PLOT_SCALES.includes(v) && localStorage.getItem('plotScale') !== null ? v : 500; } catch (_) { return 500; } })();
+function initScaleSelectors() {
+  const sels = document.querySelectorAll('.scale-sel');
+  for (const s of sels) {
+    s.innerHTML = PLOT_SCALES.map((v) => `<option value="${v}"${v === plotScale ? ' selected' : ''}>${v ? `±${v} mV` : 'Automática'}</option>`).join('');
+    s.onchange = () => {
+      plotScale = Number(s.value);
+      try { localStorage.setItem('plotScale', String(plotScale)); } catch (_) { /* nada */ }
+      for (const o of sels) o.value = String(plotScale);
+    };
+  }
+}
+const emgRange = () => (state.project?.type === 'emg' ? plotScale : 0);
 
 function plotLoop() {
   const isEmg = state.project?.type === 'emg';
@@ -909,7 +1061,7 @@ function plotLoop() {
     const cv = state.view === 'project' ? $('livePlot') : $('folderPlot');
     if (stream.ring) {
       const vc = viewChannel(stream.snapshot(), stream.channels);
-      drawSignal(cv, vc.data, vc.nCh, { symmetric: isEmg, totalFrames: stream.ringLen });
+      drawSignal(cv, vc.data, vc.nCh, { symmetric: isEmg, totalFrames: stream.ringLen, range: emgRange() });
     }
     if (state.view === 'folder' && recorder.active) {
       recorder.updatePhase();
@@ -1072,6 +1224,8 @@ async function renderHome() {
     el.onclick = () => openProject(p);
     list.appendChild(el);
   }
+  renderHistory();
+  Cloud.refresh();
 }
 
 // ---- Pantalla 2: proyecto -------------------------------------------------------
@@ -1310,8 +1464,9 @@ async function renderSessionRecs() {
     el.querySelector('[data-a=ver]').onclick = () => preview(r);
     el.querySelector('[data-a=csv]').onclick = () => download(new Blob([recToCsv(r)], { type: 'text/csv' }), recFileName(r));
     el.querySelector('[data-a=del]').onclick = async () => {
-      if (!confirm(`¿Borrar ${recBase(r)}?`)) return;
+      if (!confirm(`¿Borrar ${recBase(r)}? También se quita del historial del equipo.`)) return;
       await DB.del('recordings', r.id);
+      Cloud.remove(r.id);
       renderFolder();
     };
   }
@@ -1394,7 +1549,7 @@ function preview(r) {
     (r.kind === 'protocol' ? ' · en verde: ventanas de movimiento' : '') +
     `<br>Archivo: ${esc(recFileName(r))}`;
   $('previewDlg').showModal();
-  requestAnimationFrame(() => drawSignal($('previewPlot'), vc.data, vc.nCh, { symmetric: state.project.type === 'emg', bands: moveBands(r) }));
+  requestAnimationFrame(() => drawSignal($('previewPlot'), vc.data, vc.nCh, { symmetric: state.project.type === 'emg', bands: moveBands(r), range: emgRange() }));
 }
 
 // ---- Navegación (botón atrás de Android incluido) -------------------------------
@@ -1548,7 +1703,10 @@ function bindEvents() {
   };
   $('btnDeleteProject').onclick = async () => {
     if (!confirm(`¿Borrar el proyecto “${state.project.name}” y todas sus grabaciones?`)) return;
-    for (const r of await DB.recordings(state.project.id)) await DB.del('recordings', r.id);
+    for (const r of await DB.recordings(state.project.id)) {
+      await DB.del('recordings', r.id);
+      if (r.kind === 'protocol') await Cloud.remove(r.id);
+    }
     await DB.del('projects', state.project.id);
     history.back();
   };
@@ -1556,6 +1714,15 @@ function bindEvents() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && recorder.active) toast('Mantén la app abierta mientras grabas');
   });
+
+  // Historial del equipo
+  $('historyWho').value = Cloud.who;
+  $('historyWho').onchange = () => { Cloud.who = $('historyWho').value.trim(); };
+  $('btnHistoryRefresh').onclick = async () => { await Cloud.flush(); await Cloud.refresh(); toast('Historial actualizado'); };
+  window.addEventListener('online', () => Cloud.flush());
+  setInterval(() => {
+    if (state.view === 'home' && !document.hidden && !recorder.active) Cloud.flush().then(() => Cloud.refresh());
+  }, 30000);
 }
 
 // ---------------------------------------------------------------------------
@@ -1564,10 +1731,12 @@ async function main() {
   await DB.open();
   try { await navigator.storage?.persist?.(); } catch (_) { /* nada */ }
   resetFormMoves();
+  initScaleSelectors();
   bindEvents();
   history.replaceState({ view: 'home' }, '');
   await renderHome();
   requestAnimationFrame(plotLoop);
+  Cloud.flush().then(() => Cloud.refresh());
 }
 main().catch((e) => { console.error(e); toast('Error: ' + e.message, 6000); });
 

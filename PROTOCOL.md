@@ -38,3 +38,4 @@ Written so that a person outside the group can repeat the recording.
 Each member adds their own line from their own GitHub account.
 
 - M03, [TODO date], I read the method and I agree.
+- M01, 2026-11-21, I read the method and I agree.

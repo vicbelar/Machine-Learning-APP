@@ -119,6 +119,11 @@ input[type=checkbox] { accent-color: var(--sea); width: 16px; height: 16px; }
 .badge.on { background: var(--ok); color: #fff; }
 .badge.sim { background: var(--gold); color: var(--navy); }
 .pill { font-size: .8rem; font-weight: 800; padding: 3px 12px; border-radius: 999px; background: var(--sea-soft); color: var(--navy); }
+.pill.sim { background: var(--warn-soft); color: var(--warn); }
+.history-bar { gap: 10px; }
+.scale-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; font-weight: 600; }
+.scale-row select { width: auto; padding: 6px 10px; }
+.history-bar .grow { flex: 1; margin: 0; }
 
 /* ---------- listas ---------- */
 .list { display: flex; flex-direction: column; gap: 8px; }

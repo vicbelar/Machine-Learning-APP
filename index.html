@@ -58,6 +58,22 @@
       <h2 class="section-title">Mis proyectos</h2>
       <div id="projectList" class="list"></div>
       <p id="noProjects" class="muted center">Todavía no hay proyectos.</p>
+
+      <h2 class="section-title">Historial del equipo</h2>
+      <div class="card">
+        <p class="small muted">Lo que se grabó en todas las compus del equipo. Solo se comparte el resumen de cada
+          grabación; la señal se queda en la compu que grabó (bájala con el ZIP).</p>
+        <label class="field">¿Quién graba en esta compu?
+          <input id="historyWho" type="text" maxlength="30" placeholder="tu código de miembro, p. ej. M01">
+        </label>
+        <div class="row history-bar">
+          <p id="historyStatus" class="small grow">Cargando…</p>
+          <button id="btnHistoryRefresh" class="btn ghost small-btn">Actualizar</button>
+        </div>
+        <p id="historyPending" class="small warn" hidden></p>
+      </div>
+      <div id="historyList" class="list"></div>
+      <p id="noHistory" class="muted center" hidden>Todavía nadie del equipo ha grabado.</p>
       <p id="bleWarning" class="warn" hidden>
         Este navegador no tiene Web Bluetooth. Usa Chrome en Android o en la computadora
         (en iPhone no funciona). Puedes probar la app con el <b>simulador</b>.
@@ -78,6 +94,7 @@
           <button id="btnConnect" class="btn primary">Conectar</button>
           <button id="btnSim" class="btn ghost">Simulador</button>
         </div>
+        <label class="scale-row small muted">Escala de la gráfica <select class="scale-sel"></select></label>
         <canvas id="livePlot" class="plot" height="160"></canvas>
         <p class="muted small" id="plotLegend"></p>
       </div>
@@ -141,6 +158,7 @@
           <button id="btnStop" class="btn danger" hidden>Detener y guardar</button>
           <button id="btnCancel" class="btn ghost" hidden>Cancelar</button>
         </div>
+        <label class="scale-row small muted">Escala de la gráfica <select class="scale-sel"></select></label>
         <canvas id="folderPlot" class="plot" height="110"></canvas>
       </div>
 
