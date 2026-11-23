@@ -13,7 +13,8 @@ Project: **PERLA** (Plataforma Electromiográfica de Rehabilitación Lúdica Ada
 | M01 | @LupitaMotaReyes | data and metadata | Claude |
 | M02 | @vicbelar | recording app (Captura ML) | Claude |
 | M03 | @a00842656-spec | ESP32 firmware, trial protocol in the app, quality report | Claude |
-| M04 | @[TODO] | protocol, cue video and photos | [TODO] |
+| M04 | @a01567262-sys | Readme, Decisions | Claude |
+| M05 | @[TODO] | Protocol, cue video and photos, rationale, AI screenshot| [TODO] |
 
 Every member has at least one commit. See the commit list of this repository. We measure one person, member [TODO M0x]. In the data that person has the code P01.
 
