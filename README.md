@@ -84,6 +84,9 @@ Read `PROTOCOL.md`. Load `firmware/EMG_Captura_BLE` on the ESP32, open the app [
 | `QUALITY-REPORT.md` | rejected trials and the reason, noise at rest and in movement |
 | `code/check_quality.py` | checks the rule again from `data/raw/`, without the app |
 | `code/make_figures.py` | makes `figures/one_recording_marked.png` and `figures/two_features.png` from `data/raw/` (training sessions only) |
+| `code/train_model.py` | compares the three models of `DECISIONS.md` on the training sessions (`results/selection.md`); with `--test`, opens S05 and S06 once and writes the model in C for the ESP32 |
+| `results/` | `selection.md` (model choice, training only) and `test_result.md` (the one test on S05 and S06: 82.8 % right) |
+| `firmware/emg_model/emg_model.h` | the chosen model (RMS threshold) in C for the ESP32 |
 | `index.html`, `app.js`, `style.css`, `APP.md` | the recording app Captura ML and how to use it |
 | `firmware/` | the ESP32 code that reads the EMG and sends it to the app |
 | `cue/`, `figures/` | cue video, electrode photos (no faces), figures |

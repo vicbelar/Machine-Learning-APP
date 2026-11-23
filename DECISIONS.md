@@ -20,6 +20,8 @@ We choose with the training sessions (S01 to S04) only, and we open the test ses
 
 The threshold is our baseline: a model is only worth it if it beats the threshold on S05 and S06. Goal: more than 75 % right on those sessions.
 **Reason, in our own words.** With two classes that sit apart, the simple options may be enough, and they are easy to run on the ESP32.
+**First comparison, training sessions only** (`code/train_model.py`, details in `results/selection.md`). We train on three of S01 to S04 and score on the fourth, four times. Mean balanced accuracy: threshold 83.7 %, logistic regression 81.9 %, small network 83.5 %. The three are close; all of them drop to about 70 % when S04 is left out, the session with the most noise at rest. A more flexible model does not help with two features, so the threshold stays the strongest candidate. The test sessions are still closed.
+**Chose, and tested once.** The RMS threshold (37.2 mV on 250 ms windows), trained on S01 to S04. We then opened S05 and S06 once: **82.8 % right** (S05 83.9 %, S06 81.6 %; balanced 82.0 %), above the goal of 75 %. Most errors are movement windows called rest (113 of 480), likely the start and end of each contraction. Details in `results/test_result.md`; the model in C is `firmware/emg_model/emg_model.h`.
 **Not understood yet.** How the logistic regression and the network find the border, and how to know that a better score is not luck.
 **Sources.** scikit-learn user guide, https://scikit-learn.org/stable/user_guide.html · Edge Impulse documentation, https://docs.edgeimpulse.com/
 
