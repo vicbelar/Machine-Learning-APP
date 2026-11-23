@@ -25,7 +25,7 @@ Los proyectos EMG nuevos siguen el método del Report 1 (una persona, **un movim
 3. **Conectar** (o **Simulador** para probar).
 4. Entra a **Sesión S01**. Coloca electrodos nuevos, toma la foto (sin cara) y presiona **Grabar R01**.
    Tras una cuenta de 3 s, la pantalla guía a la persona en cada trial:
-   **Reposo → Prepárate → CONTRACCIÓN (verde) → Reposo**, con un pitido en cada cambio.
+   **Reposo → Prepárate → CONTRACCIÓN SOSTENIDA (verde) → Reposo**, con un pitido en cada cambio.
 5. Repite hasta tener las grabaciones de la sesión (por defecto 4). Para la siguiente colocación de electrodos:
    **+ Nueva sesión (electrodos nuevos)**.
 6. Al final, en el proyecto: **Descargar dataset**. El ZIP ya trae la estructura del repositorio del curso:

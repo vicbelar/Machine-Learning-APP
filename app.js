@@ -41,7 +41,7 @@ const PHASE_LABELS = ['reposo', 'aviso', 'mover', 'entre'];   // columna "label"
 const EMG_PROTOCOL_DEFAULT = {
   participant: 'P01',
   movement: 'Contracción sostenida',
-  cue_text: 'CONTRACCIÓN',
+  cue_text: 'CONTRACCIÓN SOSTENIDA',
   muscle: 'Flexores de los dedos y flexor radial del carpo',
   side: 'derecho',
   rest_s: 4, warning_s: 1, move_s: 3, between_s: 3,
@@ -59,7 +59,7 @@ const EMG_PROTOCOL_DEFAULT = {
 const PROTOCOL_FIELDS = [
   { k: 'participant', label: 'Código de la persona', ph: 'P01' },
   { k: 'movement', label: 'Movimiento', ph: 'Contracción sostenida' },
-  { k: 'cue_text', label: 'Texto en pantalla durante el movimiento', ph: 'CONTRACCIÓN' },
+  { k: 'cue_text', label: 'Texto en pantalla durante el movimiento', ph: 'CONTRACCIÓN SOSTENIDA' },
   { k: 'muscle', label: 'Músculo', ph: 'Flexores de los dedos' },
   { k: 'side', label: 'Lado', ph: 'derecho' },
   { k: 'rest_s', label: 'Reposo (s)', num: true },
@@ -1120,10 +1120,10 @@ async function normalizeProject(p) {
   let changed = false;
   if (!p.deviceId) { p.deviceId = BUILTIN_DEVICES.find((d) => d.type === p.type).id; changed = true; }
   if (!Array.isArray(p.movements)) { p.movements = DEVICE_TYPES[p.type].catalog.map((m) => ({ ...m })); changed = true; }
-  // Cue y movimiento anteriores: se cambian a "Contracción" solo si el proyecto aún no tiene grabaciones
-  // (si ya grabó, el cue se queda como estaba para no cambiar el protocolo a mitad del estudio)
-  if (p.protocol && (await DB.recordings(p.id)).length === 0) {
-    if (p.protocol.cue_text === 'CIERRA Y ABRE LA MANO') { p.protocol.cue_text = EMG_PROTOCOL_DEFAULT.cue_text; changed = true; }
+  // Cue y movimiento anteriores: se cambian a "Contracción sostenida".
+  // Las grabaciones ya hechas guardan su propia copia del protocolo, así que no se alteran.
+  if (p.protocol) {
+    if (['CIERRA Y ABRE LA MANO', 'CONTRACCIÓN'].includes(p.protocol.cue_text)) { p.protocol.cue_text = EMG_PROTOCOL_DEFAULT.cue_text; changed = true; }
     if (p.protocol.movement === 'Cerrar y abrir la mano') { p.protocol.movement = EMG_PROTOCOL_DEFAULT.movement; changed = true; }
   }
   if (changed) await DB.put('projects', p);
