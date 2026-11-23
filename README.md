@@ -47,7 +47,7 @@ One recording holds 5 trials, so it lasts 55 s. The app shows the cue from the c
 **Evidence:** `cue/cue-video.mp4`, the columns `rest_s`, `warning_s`, `move_s`, `between_s` of `data/metadata.csv`, the columns `label` and `trial` of each file in `data/raw/`, `figures/one_recording_marked.png`.
 
 ### 4. Sessions
-1 person. 6 sessions on 3 different days ([TODO dates]). Every session starts with new electrodes, placed again from zero. Each session has 4 recordings, with one minute of pause between recordings.
+1 person. 6 sessions on 3 different days: 19 November 2026 (S01, S02), 20 November (S03, S04) and 21 November (S05, S06). Every session starts with new electrodes, placed again from zero. Each session has 4 recordings, with one minute of pause between recordings.
 
 **Evidence:** the columns `participant`, `session` and `date` of `data/metadata.csv`, one photo per session in `figures/`.
 
