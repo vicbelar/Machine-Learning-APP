@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-11-23
+- Renamed the folder `edge_impulse/` to `ml_data_divided/`, because we no longer use Edge Impulse: we do the machine learning in Python (`code/`, see `DECISIONS.md`). The files inside did not change. The app now exports the windows with this name too.
 - Added the dataset: `data/raw/` (24 recordings, untouched), `data/metadata.csv`, `QUALITY-REPORT.md` and `edge_impulse/` (160 training and 80 testing windows), exported by the app.
 - Corrected `data/metadata.csv` by hand, not the raw files: `movement` said "Cerrar y abrir la mano", the old default text of the app, but the person held a contraction, so it now says "Contracción sostenida"; `electrode_distance_cm` was empty and is now 2 (about 2 cm in every session); `gain` was empty and is now 10 (total gain of the circuit; AD620 with RG = 5.6 kΩ); added `move_bpm` = 0 (no rhythm beat was used).
 - The app now uses "Contracción sostenida" and no rhythm beat (`move_bpm` = 0) by default, the same as our recordings.

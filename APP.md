@@ -36,8 +36,8 @@ Los proyectos EMG nuevos siguen el método del Report 1 (una persona, **un movim
 data/raw/P01_S01_R01.csv        señal completa: time_ms, raw_mV, emg_mV, label, trial
 data/metadata.csv               una fila por grabación (sesión, fecha, tiempos, electrodos, set train/test, rechazos)
 QUALITY-REPORT.md               regla de calidad, trials rechazados por grabación y ruido (RMS reposo vs movimiento)
-edge_impulse/training/          ventanas por trial (formato del plan anterior con Edge Impulse; ya no se usan)
-edge_impulse/testing/           lo mismo, de las sesiones de prueba
+ml_data_divided/training/       una ventana por trial que pasa la regla, de las sesiones de entrenamiento
+ml_data_divided/testing/        lo mismo, de las sesiones de prueba
 ```
 
 - `label` en `data/raw`: `reposo`, `aviso`, `mover`, `entre` (reposo después del movimiento). Las clases del modelo

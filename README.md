@@ -80,7 +80,7 @@ Read `PROTOCOL.md`. Load `firmware/EMG_Captura_BLE` on the ESP32, open the app [
 |---|---|
 | `data/raw/P01_Sxx_Ryy.csv` | one recording: `time_ms`, `raw_mV`, `emg_mV`, `label` (reposo, aviso, mover, entre), `trial` |
 | `data/metadata.csv` | one row per recording, see `DATA-DICTIONARY.md` |
-| `edge_impulse/` | windows cut for Edge Impulse in our first plan; we now do all the machine learning in Python (`code/`, see `DECISIONS.md`), so the model no longer uses them |
+| `ml_data_divided/` | one file per window of each kept trial, already divided by session into `training/` (S01 to S04) and `testing/` (S05 and S06); `code/train_model.py` reads `data/raw/` directly, so this folder is only to look at the windows |
 | `QUALITY-REPORT.md` | rejected trials and the reason, noise at rest and in movement |
 | `code/check_quality.py` | checks the rule again from `data/raw/`, without the app |
 | `code/make_figures.py` | makes `figures/one_recording_marked.png` and `figures/two_features.png` from `data/raw/` (training sessions only) |

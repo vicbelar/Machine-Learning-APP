@@ -1,0 +1,14 @@
+Proyecto: Prueba 1
+Exportado: 21/11/2026 21:55:07 (hora MTY)
+
+Cada archivo es UNA ventana de un trial que pasó la regla de calidad:
+  reposo.<persona>_<sesión>_R<grabación>_T<trial>.csv   -> 4 s de reposo
+  mover.<persona>_<sesión>_R<grabación>_T<trial>.csv    -> 3 s de movimiento
+La señal es emg_mV (filtrada en el ESP32, la misma que usa la ballena).
+
+Los datos ya vienen divididos por sesión:
+  training/  sesiones de entrenamiento
+  testing/   sesiones de prueba (S05,S06)
+La etiqueta es lo que va antes del primer punto. Nunca mezcles sesiones entre las dos
+carpetas (leakage): las sesiones de prueba nunca deben entrar al entrenamiento.
+El modelo se entrena en Python con code/train_model.py, que lee data/raw/ directamente.

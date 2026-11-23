@@ -2,7 +2,7 @@
 /*
  * Captura ML — app web para grabar datos de EMG (Ballena Monitor)
  * por Bluetooth (Web Bluetooth, servicio Nordic UART) y exportarlos
- * como CSV para Edge Impulse. Todo se guarda en el navegador (IndexedDB), no en el ESP.
+ * como CSV para machine learning en Python. Todo se guarda en el navegador (IndexedDB), no en el ESP.
  *
  * Protocolo con el ESP32 (ver README.md):
  *   app -> ESP (RX, write):   "START\n", "STOP\n", "INFO\n"
@@ -14,7 +14,7 @@
  *   - cada grabación = N trials: reposo -> aviso -> movimiento -> reposo, con un temporizador en pantalla
  *   - sesiones S01, S02, ... (una sesión = electrodos nuevos); las sesiones de prueba se eligen en el protocolo
  *   - el ZIP sale con la estructura del repositorio: data/raw/, data/metadata.csv, QUALITY-REPORT.md
- *     y edge_impulse/training|testing (separado por sesión, nunca al azar)
+ *     y ml_data_divided/training|testing (separado por sesión, nunca al azar)
  * Proyectos EMG viejos (sin protocolo) siguen con las carpetas + metrónomo.
  */
 
@@ -765,7 +765,7 @@ const recorder = {
 };
 
 // ---------------------------------------------------------------------------
-// Exportar (CSV y ZIP para Edge Impulse)
+// Exportar (CSV y ZIP)
 // ---------------------------------------------------------------------------
 function recToCsv(rec) {
   if (rec.kind === 'protocol') return protoRecToCsv(rec);
@@ -780,7 +780,7 @@ function recToCsv(rec) {
   }
   return lines.join('\n') + '\n';
 }
-// Edge Impulse toma la etiqueta de lo que va antes del primer punto: "flexion_extension.xxx.csv"
+// La etiqueta es lo que va antes del primer punto: "flexion_extension.xxx.csv"
 // La etiqueta sale del nombre actual de la carpeta (si la renombras, cambia la etiqueta)
 const moveLabel = (m) => slug(m.name);
 const movePhases = (m) => (m.phases && m.phases.length ? m.phases : [m.name]);
@@ -835,7 +835,7 @@ function trialQuality(rec) {
   return out;
 }
 
-// Segmento de un canal (con huecos interpolados: solo para Edge Impulse, data/raw queda intacto)
+// Segmento de un canal (con huecos interpolados: solo para ml_data_divided, data/raw queda intacto)
 function segment(rec, ch, start, len) {
   const nCh = rec.channels.length;
   const v = new Float32Array(len);
@@ -883,7 +883,7 @@ function buildDataset(project, recs) {
       p.skin_preparation, p.sensor_model, p.gain, p.adc_bits, r.channels.join(';'),
       'Captura ML app, on-screen trial timer', moveBpm(p), set, r.frames, r.lost, rejected.length, notes]);
     qRows.push(`| ${base}.csv | ${r.session} | ${set} | ${r.trials} | ${rejected.length} | ${rejected.length ? rejected.map((x) => `trial ${x.k}: ${x.reasons.join(' and ')}`).join('; ') : 'kept'} |`);
-    // Edge Impulse: por cada trial que pasa la regla, una ventana de reposo y una de movimiento
+    // ml_data_divided: por cada trial que pasa la regla, una ventana de reposo y una de movimiento
     const ch = Math.max(0, r.channels.indexOf('emg_mV'));
     const per = Math.round(trialLen(p) * r.fs);
     const folder = set === 'test' ? 'testing' : 'training';
@@ -902,7 +902,7 @@ function buildDataset(project, recs) {
         (label === 'mover' ? noise[r.session].move : noise[r.session].rest).push(rms(v));
         const lines = ['timestamp,emg_mV'];
         for (let i = 0; i < len; i++) lines.push(Math.round((i * 1000) / r.fs) + ',' + v[i].toFixed(1));
-        files.push({ name: `edge_impulse/${folder}/${label}.${base}_T${t.k}.csv`, data: lines.join('\n') + '\n' });
+        files.push({ name: `ml_data_divided/${folder}/${label}.${base}_T${t.k}.csv`, data: lines.join('\n') + '\n' });
       }
     }
   }
@@ -935,7 +935,7 @@ ${noiseRows.join('\n')}
 **Outliers.** Write here any recording that is far from the others of its class, and whether it is an error or a real rare case.
 `;
   files.push({ name: 'QUALITY-REPORT.md', data: report });
-  files.push({ name: 'edge_impulse/LEEME.txt', data: `Proyecto: ${project.name}
+  files.push({ name: 'ml_data_divided/LEEME.txt', data: `Proyecto: ${project.name}
 Exportado: ${fmtDate(Date.now())} (hora MTY)
 
 Cada archivo es UNA ventana de un trial que pasó la regla de calidad:
@@ -943,12 +943,12 @@ Cada archivo es UNA ventana de un trial que pasó la regla de calidad:
   mover.<persona>_<sesión>_R<grabación>_T<trial>.csv    -> ${p0.move_s} s de movimiento
 La señal es emg_mV (filtrada en el ESP32, la misma que usa la ballena).
 
-Edge Impulse > Data acquisition > Upload data:
-1. Sube la carpeta "training" con "Upload into category: Training".
-2. Sube la carpeta "testing" con "Upload into category: Testing".
-3. Label: "Infer from filename" (la etiqueta es lo que va antes del primer punto).
-NO uses "Automatically split between training and testing": mezclaría sesiones
-(leakage). Las sesiones de prueba (${p0.test_sessions}) nunca deben entrar al entrenamiento.
+Los datos ya vienen divididos por sesión:
+  training/  sesiones de entrenamiento
+  testing/   sesiones de prueba (${p0.test_sessions})
+La etiqueta es lo que va antes del primer punto. Nunca mezcles sesiones entre las dos
+carpetas (leakage): las sesiones de prueba nunca deben entrar al entrenamiento.
+El modelo se entrena en Python con code/train_model.py, que lee data/raw/ directamente.
 ` });
   return { files, tot, kept };
 }
@@ -1134,7 +1134,7 @@ const saveProject = () => DB.put('projects', state.project);
 function newCustomMove(name) {
   return { id: 'm_' + uid().replace(/-/g, '').slice(0, 10), name, phases: [], hint: 'Movimiento agregado por ti.', custom: true };
 }
-// Pide un nombre y revisa que no choque con otra carpeta (Edge Impulse usa el nombre como etiqueta)
+// Pide un nombre y revisa que no choque con otra carpeta (el nombre es la etiqueta)
 function askMoveName(current, others, title) {
   const v = prompt(title, current || '');
   if (v === null) return null;
@@ -1233,7 +1233,7 @@ function renderMoveRows() {
 
 async function renderHome() {
   $('title').textContent = 'PERLA · Captura ML';
-  $('subtitle').textContent = 'Datos de EMG para Edge Impulse';
+  $('subtitle').textContent = 'Datos de EMG para machine learning';
   await renderDeviceList();
   renderMoveRows();
   const projects = (await DB.all('projects')).filter((p) => DEVICE_TYPES[p.type])
@@ -1291,7 +1291,7 @@ async function renderProject() {
   $('folderGrid').hidden = proto;
   $('addMoves').hidden = proto;
   $('foldersTitle').textContent = proto ? 'Sesiones · cada sesión = electrodos nuevos, colocados desde cero' : 'Carpetas · elige el movimiento a grabar';
-  $('btnZip').textContent = proto ? 'Descargar dataset (ZIP con data/raw, metadata, calidad y Edge Impulse)' : 'Guardar ZIP para Edge Impulse';
+  $('btnZip').textContent = proto ? 'Descargar dataset (ZIP con data/raw, metadata, calidad y ml_data_divided)' : 'Guardar ZIP';
   if (proto) {
     renderProtocolForm(recs.some((r) => r.kind === 'protocol'));
     renderSessions(recs.filter((r) => r.kind === 'protocol'));
@@ -1314,7 +1314,7 @@ async function renderProject() {
     b.onkeydown = (e) => { if (e.key === 'Enter') openFolder(m); };
     b.querySelector('.ed-btn').onclick = async (e) => {
       e.stopPropagation();
-      const name = askMoveName(m.name, p.movements.filter((x) => x !== m), 'Nuevo nombre de la carpeta (también es la etiqueta en Edge Impulse):');
+      const name = askMoveName(m.name, p.movements.filter((x) => x !== m), 'Nuevo nombre de la carpeta (también es la etiqueta de la clase):');
       if (!name) return;
       m.name = name;
       await saveProject();
@@ -1725,10 +1725,7 @@ function bindEvents() {
     const labels = state.project.movements.map((m) => `  ${moveLabel(m)}  =  ${m.name}`).join('\n');
     const readme = `Proyecto: ${state.project.name}\nDispositivo: ${state.device.name} (${DEVICE_TYPES[state.project.type].label})\n` +
       `Exportado: ${fmtDate(Date.now())} (hora MTY)\n\nEtiquetas:\n${labels}\n\n` +
-      `Edge Impulse > Data acquisition > Upload data:\n` +
-      `1. Descomprime este ZIP.\n2. Selecciona todos los .csv.\n` +
-      `3. En "Label" elige "Infer from filename" (la etiqueta es lo que va antes del primer punto).\n` +
-      `4. "Automatically split between training and testing" (80/20).\n`;
+      `La etiqueta de cada archivo es lo que va antes del primer punto.\n`;
     files.push({ name: 'LEEME.txt', data: readme });
     download(makeZip(files), `${slug(state.project.name)}_${fileStamp(Date.now())}.zip`);
   };

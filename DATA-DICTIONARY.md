@@ -40,5 +40,5 @@ One row is one sample, 1 ms apart.
 
 The two classes of the model are `mover` (movement) and `reposo` (rest). The windows `aviso` (warning) and `entre` (rest just after the movement) are kept in the raw file but not used to train.
 
-## `edge_impulse/{training,testing}/*.csv`
+## `ml_data_divided/{training,testing}/*.csv`
 One file is one window of one kept trial: `label.P01_Sxx_Ryy_Tk.csv`, with the columns `timestamp` (ms) and `emg_mV`. The label is the text before the first dot. Missing samples inside a kept trial (at most 1 %) are filled by straight lines between neighbors only in these files; `data/raw/` keeps the gaps.
