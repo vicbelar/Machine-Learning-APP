@@ -10,7 +10,7 @@
 - Removed the accelerometer (TactSuit) part from the app: the device-type choice is gone and the app is EMG only.
   Accelerometer projects already saved in a browser are hidden, not deleted.
 
-## v1-report, [TODO date]
+## v1-report, 2026-11-23
 - The data stage of Report 1: the dataset (24 recordings of sessions S01 to S06, 120 trials), the metadata of every recording, the quality report, the split by session (S01 to S04 train, S05 and S06 test), the figures, the cue video and the photos of the electrodes.
 - What comes next (`DECISIONS.md`): the model chosen with the training sessions only, and its one test on S05 and S06.
 - Why: the test needs sessions with new electrodes that the model never saw.
