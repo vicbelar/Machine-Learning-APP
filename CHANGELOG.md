@@ -11,9 +11,10 @@
   Accelerometer projects already saved in a browser are hidden, not deleted.
 
 ## v1-report, [TODO date]
-- Added sessions S03 to S06, the quality report, the metadata of every recording and the split by session.
+- The data stage of Report 1: the dataset (24 recordings of sessions S01 to S06, 120 trials), the metadata of every recording, the quality report, the split by session (S01 to S04 train, S05 and S06 test), the figures, the cue video and the photos of the electrodes.
+- What comes next (`DECISIONS.md`): the model chosen with the training sessions only, and its one test on S05 and S06.
 - Why: the test needs sessions with new electrodes that the model never saw.
 
-## v0-first, [TODO date]
-- First version: protocol, cue, the app Captura ML with the trial timer, and the first recordings (S01, S02).
+## v0-first, 2026-11-21
+- First version, before the dataset was added: the structure of the report (README, PROTOCOL, DECISIONS, data dictionary and folders), the protocol, the cue, the app Captura ML with the trial timer and the sessions, and the script that checks the cleaning rule.
 - The ESP32 now sends the raw signal of the converter (`raw_mV`) as well as the filtered one, so we can check saturation.
