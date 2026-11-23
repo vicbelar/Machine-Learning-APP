@@ -4,8 +4,6 @@ Course: M6 Machine Learning and IoT apps. Team 6, group 604.
 
 Project: **PERLA** (Plataforma Electromiográfica de Rehabilitación Lúdica Adaptativa), a rehabilitation game for children with cerebral palsy at Instituto Nuevo Amanecer. In PERLA, the child closes the hand and a robotic turtle moves. Today the turtle moves when the RMS of one surface EMG channel passes a threshold. Here we build the data to replace that threshold with a model: **tell a contraction of the forearm muscles from rest, with one muscle signal of the forearm.**
 
-> Lines marked `[TODO]` are filled after the recordings. Remove the marks before the tag `v1-report`.
-
 ## The team
 
 | Member code | GitHub user | In charge of | AI tool |
@@ -16,7 +14,7 @@ Project: **PERLA** (Plataforma Electromiográfica de Rehabilitación Lúdica Ada
 | M04 | @a01567262-sys | Readme, Decisions | Claude |
 | M05 | @[TODO] | Protocol, cue video and photos, rationale, AI screenshot| Claude |
 
-Every member has at least one commit. See the commit list of this repository. We measure one person, member [TODO M0x]. In the data that person has the code P01.
+Every member has at least one commit. See the commit list of this repository. We measure one person, member M02. In the data that person has the code P01.
 
 ## The six parts
 
