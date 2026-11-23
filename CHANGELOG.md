@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23
+- Added the dataset: `data/raw/` (24 recordings, untouched), `data/metadata.csv`, `QUALITY-REPORT.md` and `edge_impulse/` (160 training and 80 testing windows), exported by the app.
+- Corrected `data/metadata.csv` by hand, not the raw files: `movement` said "Cerrar y abrir la mano", the old default text of the app, but the person held a contraction, so it now says "Contracción sostenida"; `electrode_distance_cm` was empty and is now 2 (about 2 cm in every session); added `move_bpm` = 0 (no rhythm beat was used).
+- The app now uses "Contracción sostenida" and no rhythm beat (`move_bpm` = 0) by default, the same as our recordings.
+
 ## 2026-11-21
 - Removed the accelerometer (TactSuit) part from the app: the device-type choice is gone and the app is EMG only.
   Accelerometer projects already saved in a browser are hidden, not deleted.

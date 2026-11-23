@@ -40,12 +40,12 @@ const MAX_MISSING = 0.01;
 const PHASE_LABELS = ['reposo', 'aviso', 'mover', 'entre'];   // columna "label" de data/raw
 const EMG_PROTOCOL_DEFAULT = {
   participant: 'P01',
-  movement: 'Contracción',
+  movement: 'Contracción sostenida',
   cue_text: 'CONTRACCIÓN',
   muscle: 'Flexores de los dedos y flexor radial del carpo',
   side: 'derecho',
   rest_s: 4, warning_s: 1, move_s: 3, between_s: 3,
-  move_bpm: 30,   // ritmo (pulsos por minuto) que suena durante la ventana de movimiento; 0 = sin ritmo
+  move_bpm: 0,    // ritmo (pulsos por minuto) durante la ventana de movimiento; 0 = sin ritmo (contracción sostenida)
   trials: 5,
   recs_per_session: 4,
   test_sessions: 'S05,S06',
@@ -58,7 +58,7 @@ const EMG_PROTOCOL_DEFAULT = {
 };
 const PROTOCOL_FIELDS = [
   { k: 'participant', label: 'Código de la persona', ph: 'P01' },
-  { k: 'movement', label: 'Movimiento', ph: 'Contracción' },
+  { k: 'movement', label: 'Movimiento', ph: 'Contracción sostenida' },
   { k: 'cue_text', label: 'Texto en pantalla durante el movimiento', ph: 'CONTRACCIÓN' },
   { k: 'muscle', label: 'Músculo', ph: 'Flexores de los dedos' },
   { k: 'side', label: 'Lado', ph: 'derecho' },
@@ -157,8 +157,8 @@ function phaseAt(t, p) {
   else if (u < p.rest_s + p.warning_s + p.move_s) ph = 2;
   return { trial, ph };
 }
-// Ritmo de la ventana de movimiento (los proyectos creados antes de este campo usan 30 por minuto)
-const moveBpm = (p) => { const v = Number(p?.move_bpm); return p?.move_bpm === undefined || p?.move_bpm === '' || !Number.isFinite(v) ? 30 : v; };
+// Ritmo de la ventana de movimiento (los proyectos creados antes de este campo no tenían ritmo: 0)
+const moveBpm = (p) => { const v = Number(p?.move_bpm); return p?.move_bpm === undefined || p?.move_bpm === '' || !Number.isFinite(v) ? 0 : v; };
 const isProto = (p) => !!(p && p.type === 'emg' && p.protocol);
 const sessId = (n) => 'S' + pad(n);
 const sessNum = (sid) => Number(String(sid).replace(/\D/g, '')) || 0;

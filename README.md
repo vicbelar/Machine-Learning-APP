@@ -20,14 +20,14 @@ Every member has at least one commit. See the commit list of this repository. We
 ## The six parts
 
 ### 1. Data acquisition
-[TODO 24] recordings, [TODO 120] trials, 6 sessions, 1 person. One channel of surface EMG on the finger flexors and the flexor carpi radialis of the right forearm, with the PERLA circuit (AD620 instrumentation amplifier, 8th-order band-pass 10 to 300 Hz, 8th-order notch at 60 Hz, offset to 1.65 V) and an ESP32 that samples at **1000 Hz** with a hardware timer. The ESP32 sends two channels over Bluetooth to our web app [Captura ML](https://vicbelar.github.io/Machine-Learning-APP/) (its code is in this repository, see `APP.md`):
+24 recordings, 120 trials, 6 sessions, 1 person. Disposable Ag/AgCl gel electrodes about 2 cm apart. One channel of surface EMG on the finger flexors and the flexor carpi radialis of the right forearm, with the PERLA circuit (AD620 instrumentation amplifier, 8th-order band-pass 10 to 300 Hz, 8th-order notch at 60 Hz, offset to 1.65 V) and an ESP32 that samples at **1000 Hz** with a hardware timer. The ESP32 sends two channels over Bluetooth to our web app [Captura ML](https://vicbelar.github.io/Machine-Learning-APP/) (its code is in this repository, see `APP.md`):
 
 - `raw_mV`: the input of the converter, in millivolts, with no digital filter. It is the analog output of the circuit, so it is already filtered by the analog stage.
 - `emg_mV`: the same signal after the digital filters of PERLA (see `PROTOCOL.md`).
 
 The app stores every sample in the browser and exports the files. Nothing is saved on the ESP32.
 
-**Evidence:** `data/raw/` ([TODO 24] files), `data/metadata.csv` ([TODO 24] rows), `cue/`, the app (`index.html`, `app.js`, `style.css`) and the firmware (`firmware/EMG_Captura_BLE/`).
+**Evidence:** `data/raw/` (24 files), `data/metadata.csv` (24 rows), `cue/`, the app (`index.html`, `app.js`, `style.css`) and the firmware (`firmware/EMG_Captura_BLE/`).
 
 ### 2. Task
 The person contracts the muscles of the right forearm (*contracción*) and holds the contraction during the whole action window (3 s), then relaxes. These are the muscles a child uses to move the turtle in PERLA. Two classes: **movement** (`mover`) and **rest** (`reposo`). The person sits, with the forearm on the table and the palm up.
@@ -47,7 +47,7 @@ One recording holds 5 trials, so it lasts 55 s. The app shows the cue from the c
 **Evidence:** `cue/cue-video.mp4`, the columns `rest_s`, `warning_s`, `move_s`, `between_s` of `data/metadata.csv`, the columns `label` and `trial` of each file in `data/raw/`, `figures/one_recording_marked.png`.
 
 ### 4. Sessions
-1 person. 6 sessions on 3 different days ([TODO dates]). Every session starts with new electrodes, placed again from zero. Each session has [TODO 4] recordings, with one minute of pause between recordings.
+1 person. 6 sessions on 3 different days ([TODO dates]). Every session starts with new electrodes, placed again from zero. Each session has 4 recordings, with one minute of pause between recordings.
 
 **Evidence:** the columns `participant`, `session` and `date` of `data/metadata.csv`, one photo per session in `figures/`.
 
@@ -56,12 +56,12 @@ Filters: the analog band-pass and notch of the PERLA circuit, then a digital not
 
 Rule to reject a trial, written before we looked at any score: reject it if one sample of `raw_mV` sits at the limit of the converter (≤ 20 mV or ≥ 3050 mV), or if more than 1 % of its samples are missing. Samples lost over Bluetooth stay as empty cells, never as zeros.
 
-Result: [TODO] of [TODO 120] trials rejected. [TODO] remain. The raw files are untouched.
+Result: 0 of 120 trials rejected. 120 remain. The raw files are untouched.
 
 **Evidence:** `QUALITY-REPORT.md`, `code/check_quality.py`, the columns `trials_rejected` and `notes` of `data/metadata.csv`.
 
 ### 6. Fair split
-Training: sessions S01 to S04, [TODO] trials. Test: sessions S05 and S06, [TODO] trials, recorded on another day with new electrodes. The model never sees these two sessions in training. We do not use the automatic 80/20 split of Edge Impulse: we upload `edge_impulse/training/` and `edge_impulse/testing/` into each category by hand. We do not cut windows of one recording into both sets.
+Training: sessions S01 to S04, 80 trials (160 windows in Edge Impulse: 80 `mover`, 80 `reposo`). Test: sessions S05 and S06, 40 trials (80 windows: 40 `mover`, 40 `reposo`), recorded on another day with new electrodes. The model never sees these two sessions in training. We do not use the automatic 80/20 split of Edge Impulse: we upload `edge_impulse/training/` and `edge_impulse/testing/` into each category by hand. We do not cut windows of one recording into both sets.
 
 Limit: the model is built and tested on one adult and one movement. We do not claim that it works for other people, and not for the children of PERLA.
 
