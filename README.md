@@ -11,8 +11,8 @@ Project: **PERLA** (Plataforma Electromiográfica de Rehabilitación Lúdica Ada
 | Member code | GitHub user | In charge of | AI tool |
 |---|---|---|---|
 | M01 | @LupitaMotaReyes | data and metadata | Claude |
-| M02 | @vicbelar | recording app (Captura ML) | Claude |
-| M03 | @a00842656-spec | ESP32 firmware, trial protocol in the app, quality report | Claude |
+| M02 | @vicbelar | ESP32 firmware, recording app (Captura ML) | Claude |
+| M03 | @a00842656-spec | Trial protocol in the app, quality report, Readme | Claude |
 | M04 | @a01567262-sys | Readme, Decisions | Claude |
 | M05 | @[TODO] | Protocol, cue video and photos, rationale, AI screenshot| [TODO] |
 
@@ -40,7 +40,7 @@ The person contracts the muscles of the right forearm (*contracción*) and holds
 |---|---|---|
 | Rest before | 0 to 4 | Reposo |
 | Warning cue | 4 to 5 | Prepárate (yellow, beep) |
-| Action window | 5 to 8 | CONTRACCIÓN (green, beep) |
+| Action window | 5 to 8 | CONTRACCIÓN SOSTENIDA (green, beep) |
 | Rest between trials | 8 to 11 | Reposo (beep) |
 
 One recording holds 5 trials, so it lasts 55 s. The app shows the cue from the count of received samples, so the label in the file and the cue on the screen use the same clock.
