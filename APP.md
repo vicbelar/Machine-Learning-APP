@@ -1,15 +1,17 @@
-# Captura ML · EMG → Edge Impulse
+# Captura ML · EMG → Python
 
 > Instrucciones de la app de grabación. El reporte del curso (Report 1) está en `README.md`.
 
-App web para grabar datos de EMG por Bluetooth desde un ESP32 y exportarlos como CSV para **Edge Impulse**.
+App web para grabar datos de EMG por Bluetooth desde un ESP32 y exportarlos como CSV. El machine learning
+(features, modelo y prueba) se hace con nuestro código de **Python en VS Code** (`code/`), ya no con Edge Impulse
+(por qué: `DECISIONS.md`).
 
 | Tipo | Dispositivo incluido | Bluetooth | Señal | Carpetas sugeridas |
 |---|---|---|---|---|
 | EMG (PERLA) | **Ballena Monitor** | `Ballena-EMG-ML` | 1000 Hz: señal cruda `raw_mV` + filtrada `emg_mV` | No usa carpetas: **protocolo de trials** (ver abajo) |
 
 Se pueden **vincular otros ESP** desde la app (*+ Agregar otro dispositivo*); el ESP debe usar el protocolo de abajo.
-Las carpetas se pueden quitar (✕), renombrar (✏️) o agregar (*+ Agregar otra opción*). **El nombre de la carpeta es la etiqueta en Edge Impulse.**
+Las carpetas se pueden quitar (✕), renombrar (✏️) o agregar (*+ Agregar otra opción*). **El nombre de la carpeta es la etiqueta de la clase.**
 
 Los datos **no se guardan en el ESP**: se guardan en el navegador que está viendo la señal (IndexedDB).
 No se borran al cerrar la página, pero sí si borras los datos del sitio en Chrome. **Descarga el ZIP al terminar cada sesión.**
@@ -34,7 +36,7 @@ Los proyectos EMG nuevos siguen el método del Report 1 (una persona, **un movim
 data/raw/P01_S01_R01.csv        señal completa: time_ms, raw_mV, emg_mV, label, trial
 data/metadata.csv               una fila por grabación (sesión, fecha, tiempos, electrodos, set train/test, rechazos)
 QUALITY-REPORT.md               regla de calidad, trials rechazados por grabación y ruido (RMS reposo vs movimiento)
-edge_impulse/training/          ventanas de los trials que pasan la regla, de las sesiones de entrenamiento
+edge_impulse/training/          ventanas por trial (formato del plan anterior con Edge Impulse; ya no se usan)
 edge_impulse/testing/           lo mismo, de las sesiones de prueba
 ```
 
@@ -46,13 +48,19 @@ edge_impulse/testing/           lo mismo, de las sesiones de prueba
 - La sesión es de **prueba** si está en *Sesiones de prueba* (por defecto S05 y S06). Nunca se mezclan sesiones
   entre entrenamiento y prueba.
 
-### Subir a Edge Impulse (proyectos con protocolo)
+### Entrenar el modelo en Python (proyectos con protocolo)
 
-1. Descomprime el ZIP.
-2. **Data acquisition → Upload data**: sube `edge_impulse/training/` con *Upload into category: **Training***
-   y luego `edge_impulse/testing/` con *Upload into category: **Testing***.
-3. *Label*: **Infer from filename** (`mover.P01_S01_R01_T1.csv` → `mover`).
-4. **No** marques *Automatically split between training and testing*: mezclaría sesiones (leakage).
+1. Descomprime el ZIP en la carpeta del repositorio (`data/raw/` y `data/metadata.csv`).
+2. Una vez: `pip install numpy scikit-learn matplotlib`.
+3. `python code/check_quality.py`: vuelve a revisar la regla de calidad desde `data/raw/`, sin la app.
+4. `python code/make_figures.py`: hace las figuras con las sesiones de entrenamiento.
+5. `python code/train_model.py`: compara los modelos **solo con S01 a S04** y escribe `results/selection.md`.
+6. Al final, **una sola vez**: `python code/train_model.py --test <modelo>`. Abre S05 y S06, escribe
+   `results/test_result.md` y el modelo en C para el ESP32 (`firmware/emg_model/emg_model.h`).
+
+El script separa por sesión con la columna `set` de `data/metadata.csv`, así que nunca mezcla sesiones (leakage).
+Para cambiar o agregar una feature se edita `code/train_model.py` y se corre otra vez; los resultados nuevos
+quedan en `results/` y el cambio exacto se ve en el commit.
 
 ## Cómo se usa (proyectos EMG anteriores, con carpetas)
 
@@ -62,17 +70,12 @@ edge_impulse/testing/           lo mismo, de las sesiones de prueba
 4. Entra a la **carpeta** del movimiento → elige duración (máx. 60 s) y ritmo → **Grabar**.
    Hay una cuenta regresiva de 3 s y luego el metrónomo marca cada movimiento (p. ej. *Flexión* / *Extensión*).
 5. Al terminar, la grabación aparece con **fecha y hora de Monterrey**. Vuelve a grabar; máximo **30 por movimiento**.
-6. En el proyecto: **Descargar todo (ZIP para Edge Impulse)**.
+6. En el proyecto: **Descargar todo (ZIP)**.
 
-## Subir a Edge Impulse
-
-1. Descomprime el ZIP.
-2. Edge Impulse → **Data acquisition** → **Upload data** → selecciona los `.csv`.
-3. En *Label* elige **Infer from filename**. La etiqueta es lo que va antes del primer punto:
-   `extension_y_flexion.emg_ballena_03_20261117-115230.csv` → etiqueta `extension_y_flexion`.
-   (Sin acentos ni espacios; el `LEEME.txt` del ZIP trae la lista de etiquetas.)
-4. Deja marcado *Automatically split between training and testing* (80 % entrenamiento / 20 % prueba).
-5. Si Edge Impulse abre el **CSV Wizard** la primera vez: la columna de tiempo es `timestamp` (milisegundos) y las demás son los valores.
+La etiqueta de cada archivo es lo que va antes del primer punto:
+`extension_y_flexion.emg_ballena_03_20261117-115230.csv` → etiqueta `extension_y_flexion`
+(sin acentos ni espacios; el `LEEME.txt` del ZIP trae la lista de etiquetas). Estos proyectos anteriores no
+siguen el protocolo por sesiones; para el modelo del curso se usan los proyectos con protocolo (arriba).
 
 Formato de cada CSV:
 

@@ -62,14 +62,14 @@ Result: 0 of 120 trials rejected. 120 remain. The raw files are untouched.
 **Evidence:** `QUALITY-REPORT.md`, `code/check_quality.py`, the columns `trials_rejected` and `notes` of `data/metadata.csv`.
 
 ### 6. Fair split
-Training: sessions S01 to S04, 80 trials (160 windows in Edge Impulse: 80 `mover`, 80 `reposo`). Test: sessions S05 and S06, 40 trials (80 windows: 40 `mover`, 40 `reposo`), recorded on another day with new electrodes. The model never sees these two sessions in training. We do not use the automatic 80/20 split of Edge Impulse: we upload `edge_impulse/training/` and `edge_impulse/testing/` into each category by hand. We do not cut windows of one recording into both sets.
+Training: sessions S01 to S04, 80 trials (2240 windows of 250 ms). Test: sessions S05 and S06, 40 trials (1120 windows of 250 ms), recorded on another day with new electrodes. The model never sees these two sessions in training. We do not use a random split: `code/train_model.py` reads the column `set` of `data/metadata.csv` and takes whole sessions for each set. To choose the model it uses only S01 to S04 ("leave one session out"), and it opens S05 and S06 only once, at the end. We do not cut windows of one recording into both sets.
 
 Limit: the model is built and tested on one adult and one movement. We do not claim that it works for other people, and not for the children of PERLA.
 
-**Evidence:** the column `set` of `data/metadata.csv`, the folders `edge_impulse/training/` and `edge_impulse/testing/`.
+**Evidence:** the column `set` of `data/metadata.csv`, `code/train_model.py`, `results/selection.md` and `results/test_result.md`.
 
 ## What comes next
-Our decisions about features, the model and the route are in `DECISIONS.md`. The rationale of each member is in `rationale/`, and a screenshot of each member's AI tool is in `ai-tools/`.
+We do all the machine learning with our own Python code in VS Code (`code/`), not with Edge Impulse. This way we see every step, every change to a feature or to the model is one commit with its new results, and we can work with our AI tool on the same code. To repeat our numbers: `pip install numpy scikit-learn matplotlib`, then `python code/train_model.py`. Our decisions about the tool, the features, the model and the route are in `DECISIONS.md`. The rationale of each member is in `rationale/`, and a screenshot of each member's AI tool is in `ai-tools/`.
 
 ## How to repeat our recording
 Read `PROTOCOL.md`. Load `firmware/EMG_Captura_BLE` on the ESP32, open the app [Captura ML](https://vicbelar.github.io/Machine-Learning-APP/) in Chrome (how to use it: `APP.md`), and use the same protocol values. It is enough to record the same way without asking us.
@@ -80,7 +80,7 @@ Read `PROTOCOL.md`. Load `firmware/EMG_Captura_BLE` on the ESP32, open the app [
 |---|---|
 | `data/raw/P01_Sxx_Ryy.csv` | one recording: `time_ms`, `raw_mV`, `emg_mV`, `label` (reposo, aviso, mover, entre), `trial` |
 | `data/metadata.csv` | one row per recording, see `DATA-DICTIONARY.md` |
-| `edge_impulse/` | the windows of the kept trials, split by session, ready for Edge Impulse |
+| `edge_impulse/` | windows cut for Edge Impulse in our first plan; we now do all the machine learning in Python (`code/`, see `DECISIONS.md`), so the model no longer uses them |
 | `QUALITY-REPORT.md` | rejected trials and the reason, noise at rest and in movement |
 | `code/check_quality.py` | checks the rule again from `data/raw/`, without the app |
 | `code/make_figures.py` | makes `figures/one_recording_marked.png` and `figures/two_features.png` from `data/raw/` (training sessions only) |
