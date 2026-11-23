@@ -20,7 +20,7 @@ Every member has at least one commit. See the commit list of this repository. We
 ## The six parts
 
 ### 1. Data acquisition
-24 recordings, 120 trials, 6 sessions, 1 person. Disposable Ag/AgCl gel electrodes about 2 cm apart. One channel of surface EMG on the finger flexors and the flexor carpi radialis of the right forearm, with the PERLA circuit (AD620 instrumentation amplifier, 8th-order band-pass 10 to 300 Hz, 8th-order notch at 60 Hz, offset to 1.65 V) and an ESP32 that samples at **1000 Hz** with a hardware timer. The ESP32 sends two channels over Bluetooth to our web app [Captura ML](https://vicbelar.github.io/Machine-Learning-APP/) (its code is in this repository, see `APP.md`):
+24 recordings, 120 trials, 6 sessions, 1 person. Disposable Ag/AgCl gel electrodes about 2 cm apart. One channel of surface EMG on the finger flexors and the flexor carpi radialis of the right forearm, with the PERLA circuit (AD620 instrumentation amplifier with a total gain of 10, 8th-order band-pass 10 to 300 Hz, 8th-order notch at 60 Hz, offset to 1.65 V) and an ESP32 that samples at **1000 Hz** with a hardware timer. The ESP32 sends two channels over Bluetooth to our web app [Captura ML](https://vicbelar.github.io/Machine-Learning-APP/) (its code is in this repository, see `APP.md`):
 
 - `raw_mV`: the input of the converter, in millivolts, with no digital filter. It is the analog output of the circuit, so it is already filtered by the analog stage.
 - `emg_mV`: the same signal after the digital filters of PERLA (see `PROTOCOL.md`).
@@ -82,6 +82,7 @@ Read `PROTOCOL.md`. Load `firmware/EMG_Captura_BLE` on the ESP32, open the app [
 | `edge_impulse/` | the windows of the kept trials, split by session, ready for Edge Impulse |
 | `QUALITY-REPORT.md` | rejected trials and the reason, noise at rest and in movement |
 | `code/check_quality.py` | checks the rule again from `data/raw/`, without the app |
+| `code/make_figures.py` | makes `figures/one_recording_marked.png` and `figures/two_features.png` from `data/raw/` (training sessions only) |
 | `index.html`, `app.js`, `style.css`, `APP.md` | the recording app Captura ML and how to use it |
 | `firmware/` | the ESP32 code that reads the EMG and sends it to the app |
 | `cue/`, `figures/` | cue video, electrode photos (no faces), figures |
