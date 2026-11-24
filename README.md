@@ -9,7 +9,7 @@ Project: **PERLA** (Plataforma Electromiográfica de Rehabilitación Lúdica Ada
 | Member code | GitHub user | In charge of | AI tool |
 |---|---|---|---|
 | M01 | @LupitaMotaReyes | Data and metadata, cue video and photos, rationale | Claude |
-| M02 | @vicbelar @vbeaawss | Recording app (Captura ML), cue video and photos, rationale | Claude |
+| M02 | @vicbelar @vbeaawss | Recording app (Captura ML), cue video and photos, rationale, Readme | Claude |
 | M03 | @a00842656-spec | Trial protocol in the app, quality report, Readme, rationale, ESP32 firmware | Claude |
 | M04 | @a01567262-sys | Readme, Decisions, rationale, AI screenshot| Claude |
 
