@@ -37,5 +37,5 @@ Written so that a person outside the group can repeat the recording.
 ## We read the method and we agree
 Each member adds their own line from their own GitHub account.
 
-- M03, [TODO date], I read the method and I agree.
+- M03, 2026-11-26, I read the method and I agree.
 - M01, 2026-11-21, I read the method and I agree.

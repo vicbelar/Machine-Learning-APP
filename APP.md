@@ -106,9 +106,9 @@ Placa: *ESP32 Dev Module*, core ESP32 3.x en Arduino IDE.
 Todo es texto, una línea por mensaje (`\n`):
 
 - La app manda `START`, `STOP` o `INFO`.
-- El ESP responde `#INFO,<nombre>,<fs_hz>,<canal1;canal2;...>,<escala>`, por ejemplo `#INFO,Ballena-EMG-ML,1000,emg_mV,10`.
-- Los datos van así: `D,<seq>,<v1>,<v2>,...`. Son enteros y el valor real es `v / escala`. Si hay varios canales, van intercalados: `ax,ay,az,ax,ay,az,…`.
-- `seq` aumenta 1 en cada línea (0–65535). Si la app detecta que faltan líneas, rellena repitiendo el último valor para no romper la escala de tiempo, y lo marca como “muestras perdidas” en la grabación.
+- El ESP responde `#INFO,<nombre>,<fs_hz>,<canal1;canal2;...>,<escala>`, por ejemplo `#INFO,Ballena-EMG-ML,1000,raw_mV;emg_mV,10`.
+- Los datos van así: `D,<seq>,<v1>,<v2>,...`. Son enteros y el valor real es `v / escala`. Si hay varios canales, van intercalados por muestra: `raw,emg,raw,emg,…`.
+- `seq` aumenta 1 en cada línea (0–65535). Si la app detecta que faltan líneas, guarda esas muestras como **huecos** (celdas vacías en el CSV, nunca ceros ni el último valor repetido) para no romper la escala de tiempo, y las cuenta como “muestras perdidas” en la grabación.
 
 Para agregar otro sensor, basta con mandar otro `#INFO` (otros canales o frecuencia). La app se adapta sola.
 
